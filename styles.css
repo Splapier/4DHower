@@ -1,8 +1,16 @@
 .eisenhower-view {
-	padding: 12px 16px 24px;
-	gap: 12px;
+	padding: 12px 16px 16px;
+	gap: 10px;
 	display: flex;
 	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.eisenhower-header,
+.eisenhower-filterrow {
+	flex-shrink: 0;
 }
 
 .eisenhower-header {
@@ -59,12 +67,16 @@
 .eisenhower-grid {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
+	grid-template-rows: repeat(2, minmax(0, 1fr));
 	gap: 10px;
+	flex: 3;
+	min-height: 0;
 }
 
 @media (max-width: 700px) {
 	.eisenhower-grid {
 		grid-template-columns: 1fr;
+		grid-template-rows: repeat(4, minmax(0, 1fr));
 	}
 }
 
@@ -75,7 +87,12 @@
 	border-radius: var(--radius-m);
 	background: var(--background-secondary);
 	overflow: hidden;
-	min-height: 90px;
+	min-height: 0;
+}
+
+.eisenhower-inbox {
+	flex: 2;
+	min-height: 0;
 }
 
 .eisenhower-qhead {
@@ -129,9 +146,11 @@
 	flex: 1;
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 3px;
 	padding: 6px;
-	min-height: 60px;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 
 .eisenhower-body.drag-over {
@@ -143,13 +162,13 @@
 .eisenhower-row {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	padding: 5px 8px;
+	gap: 6px;
+	padding: 3px 6px;
 	background: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-s);
 	cursor: grab;
-	min-height: 30px;
+	min-height: 24px;
 }
 
 .eisenhower-row:hover {
@@ -243,11 +262,20 @@
 	font-size: 0.8em;
 	font-style: italic;
 	text-align: center;
-	padding: 8px 0;
+	padding: 4px 0;
 }
 
 .eisenhower-inbox .eisenhower-qhead {
 	background: var(--background-primary-alt, var(--background-primary));
+}
+
+.eisenhower-inbox .eisenhower-row {
+	padding: 2px 6px;
+	min-height: 22px;
+}
+
+.eisenhower-inbox .eisenhower-rowtitle {
+	font-size: 0.9em;
 }
 
 /* Modal */

@@ -207,8 +207,8 @@ export default class EisenhowerPlugin extends Plugin {
 	// --- Mutations ----------------------------------------------------------------
 	async moveTask(id: string, bucket: Bucket, index: number): Promise<void> {
 		this.state = moveTask(this.state, id, bucket, index);
-		await this.persist();
 		this.notify();
+		await this.persist();
 	}
 
 	async toggleTask(task: ParsedTask): Promise<void> {
@@ -244,8 +244,8 @@ export default class EisenhowerPlugin extends Plugin {
 
 	async completeTheDay(): Promise<void> {
 		this.state = buildCompletedDayState(this.tasks, this.state);
-		await this.persist();
 		this.notify();
+		await this.persist();
 		new Notice('Day completed. Unfinished tasks moved to the inbox.', 3500);
 	}
 

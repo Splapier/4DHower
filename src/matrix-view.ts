@@ -46,6 +46,8 @@ export class EisenhowerMatrixView extends ItemView {
 	containers: Partial<Record<Bucket, HTMLElement>> = {};
 	filterRow: HTMLElement | null = null;
 	filterDropdown: DropdownComponent | null = null;
+	private drag: { id: string; row: HTMLElement } | null = null;
+	private dropHandled = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EisenhowerPlugin) {
 		super(leaf);
@@ -144,38 +146,64 @@ export class EisenhowerMatrixView extends ItemView {
 		}
 		const body = box.createDiv({ cls: 'eisenhower-body' });
 		this.containers[bucket] = body;
-		this.registerDnDHandlers(body, bucket);
+		this.registerDnDHandlers(box, body, bucket);
 		return box;
 	}
 
 	// --- Drag & drop ----------------------------------------------------------
-	private registerDnDHandlers(body: HTMLElement, bucket: Bucket): void {
-		this.registerDomEvent(body, 'dragover', (evt: DragEvent) => {
+	private registerDnDHandlers(
+		box: HTMLElement,
+		body: HTMLElement,
+		bucket: Bucket,
+	): void {
+		this.registerDomEvent(box, 'dragover', (evt: DragEvent) => {
+			const drag = this.drag;
+			if (!drag) return;
 			evt.preventDefault();
 			if (evt.dataTransfer) {
 				evt.dataTransfer.dropEffect = 'move';
 			}
 			body.addClass('drag-over');
+			this.placeDragRow(body, drag.row, evt.clientY);
 		});
-		this.registerDomEvent(body, 'dragleave', () => {
-			body.removeClass('drag-over');
-		});
-		this.registerDomEvent(body, 'drop', async (evt: DragEvent) => {
-			evt.preventDefault();
-			body.removeClass('drag-over');
-			const id = evt.dataTransfer?.getData('application/x-eisenhower-task');
-			if (!id) return;
-			const afterEl = getDragAfterElement(body, evt.clientY);
-			const order = (this.plugin.state.bucketOrder[bucket] ?? []).filter(
-				(x) => x !== id,
-			);
-			let index = order.length;
-			if (afterEl !== null && afterEl.dataset.id) {
-				const i = order.indexOf(afterEl.dataset.id);
-				if (i >= 0) index = i;
+		this.registerDomEvent(box, 'dragleave', (evt: DragEvent) => {
+			const related = evt.relatedTarget;
+			if (related === null || !box.contains(related as Node)) {
+				body.removeClass('drag-over');
 			}
-			await this.plugin.moveTask(id, bucket, index);
 		});
+		this.registerDomEvent(box, 'drop', (evt: DragEvent) => {
+			const drag = this.drag;
+			if (!drag) return;
+			evt.preventDefault();
+			const id = drag.id;
+			this.placeDragRow(body, drag.row, evt.clientY);
+			const ids = Array.from(
+				body.querySelectorAll<HTMLElement>('.eisenhower-row'),
+			).map((r) => r.dataset.id ?? '');
+			const index = Math.max(0, ids.indexOf(id));
+			this.dropHandled = true;
+			this.clearDnDState();
+			void this.plugin.moveTask(id, bucket, index);
+		});
+	}
+
+	private placeDragRow(body: HTMLElement, row: HTMLElement, y: number): void {
+		const empty = body.querySelector<HTMLElement>('.eisenhower-empty');
+		if (empty) empty.remove();
+		const afterEl = getDragAfterElement(body, y);
+		if (afterEl === null) {
+			if (body.lastElementChild !== row) body.appendChild(row);
+		} else if (row.nextElementSibling !== afterEl) {
+			body.insertBefore(row, afterEl);
+		}
+	}
+
+	private clearDnDState(): void {
+		this.drag = null;
+		for (const body of Object.values(this.containers)) {
+			body?.removeClass('drag-over');
+		}
 	}
 
 	// --- Rendering ------------------------------------------------------------
@@ -286,10 +314,18 @@ export class EisenhowerMatrixView extends ItemView {
 				evt.dataTransfer.setData('application/x-eisenhower-task', t.id);
 				evt.dataTransfer.effectAllowed = 'move';
 			}
+			this.dropHandled = false;
+			this.drag = { id: t.id, row };
 			window.setTimeout(() => row.addClass('dragging'), 0);
 		});
 		this.registerDomEvent(row, 'dragend', () => {
 			row.removeClass('dragging');
+			if (this.dropHandled) {
+				this.dropHandled = false;
+				return;
+			}
+			this.clearDnDState();
+			this.plugin.notify();
 		});
 
 		return row;
