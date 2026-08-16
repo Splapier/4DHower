@@ -48,6 +48,10 @@ export class EisenhowerMatrixView extends ItemView {
 	filterDropdown: DropdownComponent | null = null;
 	private drag: { id: string; row: HTMLElement } | null = null;
 	private dropHandled = false;
+	private dragFrame: number | null = null;
+	private pendingDrag: { body: HTMLElement; y: number } | null = null;
+	private rows = new Map<string, HTMLElement>();
+	private lastFilterKey: string | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EisenhowerPlugin) {
 		super(leaf);
@@ -69,6 +73,9 @@ export class EisenhowerMatrixView extends ItemView {
 	async onOpen(): Promise<void> {
 		const el = this.contentEl;
 		el.empty();
+		this.rows.clear();
+		this.lastFilterKey = null;
+		this.drag = null;
 		el.addClass('eisenhower-view');
 
 		const header = el.createDiv({ cls: 'eisenhower-header' });
@@ -114,6 +121,9 @@ export class EisenhowerMatrixView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.cancelDragFrame();
+		this.drag = null;
+		this.rows.clear();
 		this.contentEl.empty();
 	}
 
@@ -163,8 +173,23 @@ export class EisenhowerMatrixView extends ItemView {
 			if (evt.dataTransfer) {
 				evt.dataTransfer.dropEffect = 'move';
 			}
-			body.addClass('drag-over');
-			this.placeDragRow(body, drag.row, evt.clientY);
+			if (!body.hasClass('drag-over')) body.addClass('drag-over');
+			this.pendingDrag = { body, y: evt.clientY };
+			if (this.dragFrame === null) {
+				this.dragFrame = window.requestAnimationFrame(() => {
+					this.dragFrame = null;
+					const pending = this.pendingDrag;
+					const d = this.drag;
+					this.pendingDrag = null;
+					if (pending === null || d === null) return;
+					for (const other of Object.values(this.containers)) {
+						if (other !== undefined && other !== pending.body) {
+							other.removeClass('drag-over');
+						}
+					}
+					this.placeDragRow(pending.body, d.row, pending.y);
+				});
+			}
 		});
 		this.registerDomEvent(box, 'dragleave', (evt: DragEvent) => {
 			const related = evt.relatedTarget;
@@ -177,6 +202,7 @@ export class EisenhowerMatrixView extends ItemView {
 			if (!drag) return;
 			evt.preventDefault();
 			const id = drag.id;
+			this.cancelDragFrame();
 			this.placeDragRow(body, drag.row, evt.clientY);
 			const ids = Array.from(
 				body.querySelectorAll<HTMLElement>('.eisenhower-row'),
@@ -199,8 +225,17 @@ export class EisenhowerMatrixView extends ItemView {
 		}
 	}
 
+	private cancelDragFrame(): void {
+		if (this.dragFrame !== null) {
+			window.cancelAnimationFrame(this.dragFrame);
+			this.dragFrame = null;
+		}
+		this.pendingDrag = null;
+	}
+
 	private clearDnDState(): void {
 		this.drag = null;
+		this.cancelDragFrame();
 		for (const body of Object.values(this.containers)) {
 			body?.removeClass('drag-over');
 		}
@@ -210,6 +245,10 @@ export class EisenhowerMatrixView extends ItemView {
 	private renderFilter(): void {
 		const filterRow = this.filterRow;
 		if (!filterRow) return;
+		const files = Array.from(new Set(this.plugin.tasks.map((t) => t.file))).sort();
+		const key = files.join('\u0001') + '\u0001' + (this.filter ?? '');
+		if (key === this.lastFilterKey) return;
+		this.lastFilterKey = key;
 		filterRow.empty();
 		this.filterDropdown = null;
 		new Setting(filterRow)
@@ -218,9 +257,6 @@ export class EisenhowerMatrixView extends ItemView {
 			.addDropdown((dd) => {
 				this.filterDropdown = dd;
 				dd.addOption('', 'All files');
-				const files = Array.from(
-					new Set(this.plugin.tasks.map((t) => t.file)),
-				).sort();
 				for (const f of files) dd.addOption(f, f);
 				dd.setValue(this.filter ?? '');
 				dd.onChange((value) => {
@@ -235,23 +271,63 @@ export class EisenhowerMatrixView extends ItemView {
 		this.renderFilter();
 		const byId = new Map(this.plugin.tasks.map((t) => [t.id, t]));
 		const filter = this.filter;
+		const wanted = new Set<string>();
+		const desired = {} as Record<Bucket, ParsedTask[]>;
 		for (const bucket of BUCKETS) {
-			const body = this.containers[bucket];
-			if (!body) continue;
-			body.empty();
-			const shown: ParsedTask[] = [];
+			const list: ParsedTask[] = [];
 			for (const id of st.bucketOrder[bucket] ?? []) {
 				if (st.clearedIds.includes(id)) continue;
 				const t = byId.get(id);
 				if (!t) continue;
 				if (filter !== null && t.file !== filter) continue;
-				shown.push(t);
+				list.push(t);
+				wanted.add(t.id);
+			}
+			desired[bucket] = list;
+		}
+		for (const [id, row] of Array.from(this.rows)) {
+			if (!wanted.has(id)) {
+				row.remove();
+				this.rows.delete(id);
+			}
+		}
+		for (const bucket of BUCKETS) {
+			const body = this.containers[bucket];
+			if (!body) continue;
+			const emptyEl = body.querySelector<HTMLElement>('.eisenhower-empty');
+			if (emptyEl) emptyEl.remove();
+			const shown = desired[bucket];
+			for (const t of shown) {
+				let row = this.rows.get(t.id);
+				if (row === undefined) {
+					row = this.createRow(body, t);
+					this.rows.set(t.id, row);
+				} else {
+					this.updateRow(row, t);
+				}
+				body.appendChild(row);
 			}
 			if (shown.length === 0) {
 				body.createDiv({ cls: 'eisenhower-empty', text: 'No tasks' });
 			}
-			for (const t of shown) body.appendChild(this.createRow(body, t));
 		}
+	}
+
+	private updateRow(row: HTMLElement, t: ParsedTask): void {
+		const check = row.querySelector<HTMLInputElement>('.eisenhower-check');
+		if (check && check.checked !== t.completed) check.checked = t.completed;
+		const key = `${t.file}\u0001${t.title}`;
+		if (row.dataset.titleKey === key) return;
+		row.dataset.titleKey = key;
+		const titleEl = row.querySelector<HTMLElement>('.eisenhower-rowtitle');
+		if (titleEl === null) return;
+		titleEl.empty();
+		MarkdownRenderer.render(this.app, t.title, titleEl, t.file, this).catch(
+			(err: unknown) => {
+				titleEl.setText(t.title);
+				console.error('eisenhower: failed to render task title', err);
+			},
+		);
 	}
 
 	private createRow(parent: HTMLElement, t: ParsedTask): HTMLElement {
@@ -260,6 +336,7 @@ export class EisenhowerMatrixView extends ItemView {
 			attr: { draggable: 'true' },
 		});
 		row.dataset.id = t.id;
+		row.dataset.titleKey = `${t.file}\u0001${t.title}`;
 
 		const check = row.createEl('input', {
 			cls: 'eisenhower-check',
@@ -320,6 +397,7 @@ export class EisenhowerMatrixView extends ItemView {
 		});
 		this.registerDomEvent(row, 'dragend', () => {
 			row.removeClass('dragging');
+			this.cancelDragFrame();
 			if (this.dropHandled) {
 				this.dropHandled = false;
 				return;
