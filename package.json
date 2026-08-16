@@ -1,0 +1,19 @@
+{
+  "name": "4dhower",
+  "version": "1.0.0",
+  "description": "Obsidian plugin for an eisenhower matrix style todo list system",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Splapier/4DHower.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Splapier/4DHower/issues"
+  },
+  "homepage": "https://github.com/Splapier/4DHower#readme"
+}
