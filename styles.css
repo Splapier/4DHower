@@ -1,8 +1,321 @@
-/*
+.eisenhower-view {
+	padding: 12px 16px 24px;
+	gap: 12px;
+	display: flex;
+	flex-direction: column;
+}
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+.eisenhower-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	flex-wrap: wrap;
+}
 
-If your plugin does not need CSS, delete this file.
+.eisenhower-title {
+	margin: 0;
+	font-size: 1.3em;
+	font-weight: 700;
+}
 
-*/
+.eisenhower-actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.eisenhower-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	background: var(--interactive-secondary);
+	border: none;
+	border-radius: var(--radius-m);
+	color: var(--normal-text);
+	cursor: pointer;
+	font-size: 0.9em;
+}
+
+.eisenhower-btn:hover {
+	background: var(--interactive-hover);
+}
+
+.eisenhower-btn-complete {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.eisenhower-btn-complete:hover {
+	background: var(--interactive-accent-hover, var(--interactive-accent));
+}
+
+.eisenhower-filterrow .setting-item {
+	border: none;
+	padding: 2px 0;
+}
+
+.eisenhower-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+}
+
+@media (max-width: 700px) {
+	.eisenhower-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+.eisenhower-quadrant {
+	display: flex;
+	flex-direction: column;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	overflow: hidden;
+	min-height: 90px;
+}
+
+.eisenhower-qhead {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 10px;
+	background: var(--background-primary);
+	border-bottom: 1px solid var(--background-modifier-border);
+	min-height: 34px;
+}
+
+.eisenhower-qicon {
+	display: inline-flex;
+	color: var(--text-muted);
+}
+
+.eisenhower-qicon svg {
+	width: 15px;
+	height: 15px;
+}
+
+.eisenhower-qtitle {
+	font-weight: 600;
+	font-size: 0.95em;
+}
+
+.eisenhower-qsub {
+	font-size: 0.75em;
+	color: var(--text-muted);
+	margin-left: auto;
+	margin-right: 4px;
+}
+
+.eisenhower-plus {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--text-muted);
+	padding: 2px;
+	border-radius: var(--radius-s);
+	display: inline-flex;
+}
+
+.eisenhower-plus:hover {
+	background: var(--interactive-hover);
+	color: var(--normal-text);
+}
+
+.eisenhower-body {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 6px;
+	min-height: 60px;
+}
+
+.eisenhower-body.drag-over {
+	outline: 2px dashed var(--interactive-accent);
+	outline-offset: -4px;
+	background: var(--background-modifier-hover, var(--background-primary));
+}
+
+.eisenhower-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 8px;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	cursor: grab;
+	min-height: 30px;
+}
+
+.eisenhower-row:hover {
+	border-color: var(--background-modifier-border-focus, var(--interactive-accent));
+}
+
+.eisenhower-row.dragging {
+	opacity: 0.4;
+	cursor: grabbing;
+}
+
+.eisenhower-check {
+	flex-shrink: 0;
+	width: 15px;
+	height: 15px;
+	cursor: pointer;
+}
+
+.eisenhower-rowtitle {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	line-height: 1.3;
+}
+
+.eisenhower-rowtitle .internal-embed,
+.eisenhower-rowtitle img {
+	max-height: 1.2em;
+	vertical-align: middle;
+}
+
+.eisenhower-rowtitle p {
+	margin: 0;
+}
+
+.eisenhower-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 140px;
+	background: var(--background-modifier-hover, var(--background-secondary));
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	padding: 1px 8px 1px 6px;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 0.72em;
+	flex-shrink: 0;
+}
+
+.eisenhower-badge:hover {
+	color: var(--normal-text);
+	border-color: var(--interactive-accent);
+}
+
+.eisenhower-badge svg {
+	width: 11px;
+	height: 11px;
+}
+
+.eisenhower-badge-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.eisenhower-more {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--text-muted);
+	padding: 2px;
+	border-radius: var(--radius-s);
+	display: inline-flex;
+	flex-shrink: 0;
+}
+
+.eisenhower-more:hover {
+	background: var(--interactive-hover);
+	color: var(--normal-text);
+}
+
+.eisenhower-more svg {
+	width: 15px;
+	height: 15px;
+}
+
+.eisenhower-empty {
+	color: var(--text-faint);
+	font-size: 0.8em;
+	font-style: italic;
+	text-align: center;
+	padding: 8px 0;
+}
+
+.eisenhower-inbox .eisenhower-qhead {
+	background: var(--background-primary-alt, var(--background-primary));
+}
+
+/* Modal */
+.eisenhower-modal-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.eisenhower-modal-input {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* Settings */
+.eisenhower-settings-dirs {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 8px;
+}
+
+.eisenhower-settings-dirrow {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 3px 8px;
+	background: var(--background-secondary);
+	border-radius: var(--radius-s);
+	font-size: 0.92em;
+}
+
+.eisenhower-settings-dir {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.eisenhower-settings-remove {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--text-muted);
+	font-size: 1.2em;
+	line-height: 1;
+	padding: 0 4px;
+	border-radius: var(--radius-s);
+}
+
+.eisenhower-settings-remove:hover {
+	color: var(--text-error, var(--normal-text));
+	background: var(--interactive-hover);
+}
+
+.eisenhower-settings-addrow {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.eisenhower-settings-addrow input {
+	flex: 1;
+}
+
+.eisenhower-settings-empty {
+	color: var(--text-faint);
+	font-size: 0.85em;
+	font-style: italic;
+}

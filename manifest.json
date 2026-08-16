@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
-	"version": "1.0.0",
-	"minAppVersion": "1.0.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"id": "4dhower",
+	"name": "Eisenhower Matrix",
+	"version": "0.1.0",
+	"minAppVersion": "1.7.2",
+	"description": "Eisenhower matrix style todo list built on your markdown tasks: 2x2 grid, inbox, drag and drop, and a one-click 'complete the day'.",
+	"author": "Splapier",
+	"authorUrl": "https://github.com/Splapier",
 	"isDesktopOnly": false
 }

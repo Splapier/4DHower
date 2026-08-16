@@ -1,114 +1,266 @@
+import { Notice, Plugin, TAbstractFile, TFile } from 'obsidian';
 import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
-	Plugin,
-} from 'obsidian';
+	Bucket,
+	MatrixState,
+	ParsedTask,
+	buildCompletedDayState,
+	emptyState,
+	findTask,
+	flipLine,
+	moveTask,
+	parseFileTasks,
+	reconcile,
+} from './model';
 import {
 	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
+	EisenhowerSettings,
+	EisenhowerSettingTab,
 } from './settings';
+import {
+	AddTaskModal,
+	ConfirmationModal,
+	EisenhowerMatrixView,
+} from './matrix-view';
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
-
-	async onload() {
-		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (
-				editor: Editor,
-				_ctx: MarkdownView | MarkdownFileInfo,
-			) => {
-				editor.replaceSelection('Sample editor command');
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			},
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
-	}
-
-	onunload() {}
-
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
-		);
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+interface StoredData {
+	settings?: Partial<EisenhowerSettings>;
+	matrix?: {
+		bucketOrder?: Partial<Record<Bucket, string[]>>;
+		clearedIds?: string[];
+	};
 }
 
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
+export type StateListener = (state: MatrixState) => void;
+
+export default class EisenhowerPlugin extends Plugin {
+	settings: EisenhowerSettings = { ...DEFAULT_SETTINGS };
+	state: MatrixState = emptyState();
+	tasks: ParsedTask[] = [];
+
+	private listeners = new Set<StateListener>();
+	private reloadTimer: number | null = null;
+
+	async onload(): Promise<void> {
+		await this.loadPersistentData();
+
+		this.registerView(
+			EisenhowerMatrixView.VIEW_TYPE,
+			(leaf) => new EisenhowerMatrixView(leaf, this),
+		);
+
+		this.addRibbonIcon('layout-grid', 'Open Eisenhower Matrix', () => {
+			void this.openView();
+		});
+
+		this.addCommand({
+			id: 'eisenhower-open',
+			name: 'Open',
+			callback: () => {
+				void this.openView();
+			},
+		});
+
+		this.addCommand({
+			id: 'eisenhower-new-task',
+			name: 'New task',
+			callback: () => {
+				new AddTaskModal(this.app, this).open();
+			},
+		});
+
+		this.addCommand({
+			id: 'eisenhower-complete-day',
+			name: 'Complete the day',
+			callback: () => {
+				const unfinished = this.tasks.filter((t) => !t.completed).length;
+				const message =
+					unfinished === 0
+						? 'All tasks are already complete. Archive everything?'
+						: `${unfinished} unfinished task${unfinished === 1 ? '' : 's'} will move to the inbox and completed tasks will be archived. Continue?`;
+				new ConfirmationModal(this.app, message, () => this.completeTheDay()).open();
+			},
+		});
+
+		this.addSettingTab(new EisenhowerSettingTab(this.app, this));
+
+		const isRelevant = (path: string): boolean => {
+			if (!path.endsWith('.md')) return false;
+			const roots = this.settings.taskDirectories;
+			if (roots.length === 0) return true;
+			return roots.some((r) => path === r || path.startsWith(`${r}/`));
+		};
+
+		const scheduleReload = (): void => {
+			if (this.reloadTimer !== null) window.clearTimeout(this.reloadTimer);
+			this.reloadTimer = window.setTimeout(() => {
+				this.reloadTimer = null;
+				void this.reloadNow().catch((err: unknown) => {
+					console.error('eisenhower: reload failed', err);
+				});
+			}, 150);
+		};
+
+		this.registerEvent(
+			this.app.vault.on('modify', (file: TAbstractFile) => {
+				if (isRelevant(file.path)) scheduleReload();
+			}),
+		);
+		this.registerEvent(
+			this.app.vault.on('create', (file: TAbstractFile) => {
+				if (isRelevant(file.path)) scheduleReload();
+			}),
+		);
+		this.registerEvent(
+			this.app.vault.on('delete', (file: TAbstractFile) => {
+				if (isRelevant(file.path)) scheduleReload();
+			}),
+		);
+		this.registerEvent(
+			this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
+				if (isRelevant(file.path) || isRelevant(oldPath)) scheduleReload();
+			}),
+		);
+
+		await this.reloadNow();
 	}
 
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
+	onunload(): void {
+		// Views and event listeners are cleaned up by the plugin runtime.
+	}
+
+	// --- Persistence -----------------------------------------------------------
+	private async loadPersistentData(): Promise<void> {
+		const data = ((await this.loadData()) ?? {}) as StoredData;
+		this.settings = {
+			...DEFAULT_SETTINGS,
+			...(data.settings ?? {}),
+		};
+		const m = data.matrix;
+		this.state = {
+			bucketOrder: {
+				q1: m?.bucketOrder?.q1 ?? [],
+				q2: m?.bucketOrder?.q2 ?? [],
+				q3: m?.bucketOrder?.q3 ?? [],
+				q4: m?.bucketOrder?.q4 ?? [],
+				inbox: m?.bucketOrder?.inbox ?? [],
+			},
+			clearedIds: m?.clearedIds ?? [],
+		};
+	}
+
+	private async persist(): Promise<void> {
+		const data: StoredData = {
+			settings: this.settings,
+			matrix: {
+				bucketOrder: this.state.bucketOrder,
+				clearedIds: this.state.clearedIds,
+			},
+		};
+		await this.saveData(data);
+	}
+
+	// --- State & notification ----------------------------------------------------
+	subscribe(listener: StateListener): () => void {
+		this.listeners.add(listener);
+		return () => {
+			this.listeners.delete(listener);
+		};
+	}
+
+	notify(): void {
+		for (const listener of Array.from(this.listeners)) {
+			listener(this.state);
+		}
+	}
+
+	private scanFiles(): TFile[] {
+		const all = this.app.vault.getMarkdownFiles();
+		const roots = this.settings.taskDirectories;
+		if (roots.length === 0) return all;
+		return all.filter((f) =>
+			roots.some((r) => f.path === r || f.path.startsWith(`${r}/`)),
+		);
+	}
+
+	async reloadNow(): Promise<void> {
+		const files = this.scanFiles();
+		const tasks: ParsedTask[] = [];
+		for (const file of files) {
+			try {
+				const content = await this.app.vault.read(file);
+				tasks.push(...parseFileTasks(file.path, content));
+			} catch {
+				// Skip unreadable files.
+			}
+		}
+		this.tasks = tasks;
+		this.state = reconcile(tasks, this.state);
+		await this.persist();
+		this.notify();
+	}
+
+	async onSettingsChanged(): Promise<void> {
+		await this.persist();
+		await this.reloadNow();
+	}
+
+	// --- Mutations ----------------------------------------------------------------
+	async moveTask(id: string, bucket: Bucket, index: number): Promise<void> {
+		this.state = moveTask(this.state, id, bucket, index);
+		await this.persist();
+		this.notify();
+	}
+
+	async toggleTask(task: ParsedTask): Promise<void> {
+		const file = this.app.vault.getFileByPath(task.file);
+		if (!file) {
+			new Notice(`File not found: ${task.file}`, 5000);
+			return;
+		}
+		await this.app.vault.process(file, (current) => {
+			const fresh = parseFileTasks(file.path, current);
+			const found = findTask(fresh, task.id);
+			if (!found) return current;
+			return flipLine(current, found.line, !found.completed);
+		});
+		await this.reloadNow();
+	}
+
+	async addTask(title: string, filePath: string): Promise<void> {
+		const path = filePath.trim();
+		if (!path) throw new Error('No file selected.');
+		if (!path.endsWith('.md')) {
+			throw new Error(`${path} is not a markdown file.`);
+		}
+		let file = this.app.vault.getFileByPath(path);
+		if (!file) {
+			file = await this.app.vault.create(path, '');
+		}
+		const content = await this.app.vault.read(file);
+		const prefix = content.length === 0 || content.endsWith('\n') ? '' : '\n';
+		await this.app.vault.append(file, `${prefix}- [ ] ${title}\n`);
+		await this.reloadNow();
+	}
+
+	async completeTheDay(): Promise<void> {
+		this.state = buildCompletedDayState(this.tasks, this.state);
+		await this.persist();
+		this.notify();
+		new Notice('Day completed. Unfinished tasks moved to the inbox.', 3500);
+	}
+
+	// --- View helpers -----------------------------------------------------------
+	async openView(): Promise<void> {
+		const { workspace } = this.app;
+		const existing = workspace.getLeavesOfType(EisenhowerMatrixView.VIEW_TYPE);
+		for (const leaf of existing) {
+			await workspace.revealLeaf(leaf);
+			return;
+		}
+		const leaf = workspace.getLeaf(true);
+		await leaf.setViewState({
+			type: EisenhowerMatrixView.VIEW_TYPE,
+			active: true,
+		});
 	}
 }
