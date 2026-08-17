@@ -270,13 +270,14 @@ export class EisenhowerMatrixView extends ItemView {
 		const st = state ?? this.plugin.state;
 		this.renderFilter();
 		const byId = new Map(this.plugin.tasks.map((t) => [t.id, t]));
+		const clearedSet = new Set(st.clearedIds);
 		const filter = this.filter;
 		const wanted = new Set<string>();
 		const desired = {} as Record<Bucket, ParsedTask[]>;
 		for (const bucket of BUCKETS) {
 			const list: ParsedTask[] = [];
 			for (const id of st.bucketOrder[bucket] ?? []) {
-				if (st.clearedIds.includes(id)) continue;
+				if (clearedSet.has(id)) continue;
 				const t = byId.get(id);
 				if (!t) continue;
 				if (filter !== null && t.file !== filter) continue;

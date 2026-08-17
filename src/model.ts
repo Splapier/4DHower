@@ -177,21 +177,31 @@ export function buildCompletedDayState(
 }
 
 export function moveTask(
-	state: MatrixState,
-	id: string,
-	target: Bucket,
-	index: number,
+  state: MatrixState,
+  id: string,
+  target: Bucket,
+  index: number,
 ): MatrixState {
-	const bucketOrder = {} as Record<Bucket, string[]>;
-	for (const bucket of BUCKETS) {
-		bucketOrder[bucket] = (state.bucketOrder[bucket] ?? []).filter(
-			(x) => x !== id,
-		);
-	}
-	const arr = bucketOrder[target];
-	const clamped = Math.max(0, Math.min(index, arr.length));
-	arr.splice(clamped, 0, id);
-	return { bucketOrder, clearedIds: state.clearedIds };
+  const bucketOrder = { ...state.bucketOrder };
+  let source: Bucket | null = null;
+  for (const bucket of BUCKETS) {
+    const arr = bucketOrder[bucket];
+    if (arr.includes(id)) {
+      source = bucket;
+      break;
+    }
+  }
+  if (source) {
+    const srcArr = [...bucketOrder[source]];
+    const idx = srcArr.indexOf(id);
+    if (idx !== -1) srcArr.splice(idx, 1);
+    bucketOrder[source] = srcArr;
+  }
+  const targetArr = [...(bucketOrder[target] ?? [])];
+  const clamped = Math.max(0, Math.min(index, targetArr.length));
+  targetArr.splice(clamped, 0, id);
+  bucketOrder[target] = targetArr;
+  return { bucketOrder, clearedIds: state.clearedIds };
 }
 
 export function bucketOf(state: MatrixState, id: string): Bucket | null {
