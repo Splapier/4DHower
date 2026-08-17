@@ -58,6 +58,8 @@ export interface MatrixState {
 	clearedIds: string[];
 }
 
+const bucketIndexCache = new WeakMap<MatrixState, Map<string, Bucket>>();
+
 export function emptyState(): MatrixState {
 	return {
 		bucketOrder: { q1: [], q2: [], q3: [], q4: [], inbox: [] },
@@ -148,7 +150,9 @@ export function reconcile(tasks: ParsedTask[], previous: MatrixState): MatrixSta
 			}
 		}
 	}
-	return { bucketOrder, clearedIds };
+	const state = { bucketOrder, clearedIds };
+	buildBucketIndex(state);
+	return state;
 }
 
 export function buildCompletedDayState(
@@ -173,7 +177,19 @@ export function buildCompletedDayState(
 		if (t.completed) state.clearedIds.push(t.id);
 		else state.bucketOrder.inbox.push(t.id);
 	}
+	buildBucketIndex(state);
 	return state;
+}
+
+function buildBucketIndex(state: MatrixState): void {
+  const map = new Map<string, Bucket>();
+  for (const bucket of BUCKETS) {
+    const arr = state.bucketOrder[bucket] ?? [];
+    for (const id of arr) {
+      map.set(id, bucket);
+    }
+  }
+  bucketIndexCache.set(state, map);
 }
 
 export function moveTask(
@@ -183,12 +199,14 @@ export function moveTask(
   index: number,
 ): MatrixState {
   const bucketOrder = { ...state.bucketOrder };
-  let source: Bucket | null = null;
-  for (const bucket of BUCKETS) {
-    const arr = bucketOrder[bucket];
-    if (arr.includes(id)) {
-      source = bucket;
-      break;
+  const indexMap = bucketIndexCache.get(state);
+  let source: Bucket | null = indexMap?.get(id) ?? null;
+  if (!source) {
+    for (const bucket of BUCKETS) {
+      if ((bucketOrder[bucket] ?? []).includes(id)) {
+        source = bucket;
+        break;
+      }
     }
   }
   if (source) {
@@ -201,10 +219,14 @@ export function moveTask(
   const clamped = Math.max(0, Math.min(index, targetArr.length));
   targetArr.splice(clamped, 0, id);
   bucketOrder[target] = targetArr;
-  return { bucketOrder, clearedIds: state.clearedIds };
+  const newState = { bucketOrder, clearedIds: state.clearedIds };
+  buildBucketIndex(newState);
+  return newState;
 }
 
 export function bucketOf(state: MatrixState, id: string): Bucket | null {
+	const map = bucketIndexCache.get(state);
+	if (map) return map.get(id) ?? null;
 	for (const bucket of BUCKETS) {
 		if ((state.bucketOrder[bucket] ?? []).includes(id)) return bucket;
 	}
