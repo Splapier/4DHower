@@ -153,12 +153,6 @@
 	overscroll-behavior: contain;
 }
 
-.eisenhower-body.drag-over {
-	outline: 2px dashed var(--interactive-accent);
-	outline-offset: -4px;
-	background: var(--background-modifier-hover, var(--background-primary));
-}
-
 .eisenhower-row {
 	display: flex;
 	align-items: center;

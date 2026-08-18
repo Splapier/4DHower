@@ -176,7 +176,6 @@ export class EisenhowerMatrixView extends ItemView {
 			if (evt.dataTransfer) {
 				evt.dataTransfer.dropEffect = 'move';
 			}
-			if (!body.hasClass('drag-over')) body.addClass('drag-over');
 			this.pendingDrag = { body, y: evt.clientY };
 			if (this.dragFrame === null) {
 				this.dragFrame = window.requestAnimationFrame(() => {
@@ -186,19 +185,8 @@ export class EisenhowerMatrixView extends ItemView {
 					this.pendingDrag = null;
 					if (pending === null || d === null) return;
 					if (this.dragStartTick === 0) return;
-					for (const other of Object.values(this.containers)) {
-						if (other !== undefined && other !== pending.body) {
-							other.removeClass('drag-over');
-						}
-					}
 					this.placeDragRow(pending.body, d.row, pending.y);
 				});
-			}
-		});
-		this.registerDomEvent(box, 'dragleave', (evt: DragEvent) => {
-			const related = evt.relatedTarget;
-			if (related === null || !box.contains(related as Node)) {
-				body.removeClass('drag-over');
 			}
 		});
 		this.registerDomEvent(box, 'drop', (evt: DragEvent) => {
@@ -243,9 +231,6 @@ export class EisenhowerMatrixView extends ItemView {
 		this.drag = null;
 		this.dragStartTick = 0;
 		this.cancelDragFrame();
-		for (const body of Object.values(this.containers)) {
-			body?.removeClass('drag-over');
-		}
 	}
 
 	// --- Rendering ------------------------------------------------------------
