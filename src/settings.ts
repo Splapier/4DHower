@@ -4,11 +4,13 @@ import type EisenhowerPlugin from './main';
 export interface EisenhowerSettings {
 	taskDirectories: string[];
 	defaultTaskFile: string;
+	includeSubdirectories: boolean;
 }
 
 export const DEFAULT_SETTINGS: EisenhowerSettings = {
 	taskDirectories: [],
 	defaultTaskFile: 'Inbox.md',
+	includeSubdirectories: true,
 };
 
 export class EisenhowerSettingTab extends PluginSettingTab {
@@ -32,7 +34,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
 		const dirsSetting = new Setting(containerEl)
 			.setName('Task directories')
 			.setDesc(
-				'Folders to scan for tasks. Leave the list empty to scan the whole vault.',
+				'Folders to scan for tasks, in addition to the default task file.',
 			);
 		const dirsList = dirsSetting.settingEl.createDiv({
 			cls: 'eisenhower-settings-dirs',
@@ -73,6 +75,19 @@ export class EisenhowerSettingTab extends PluginSettingTab {
 			if (evt.key === 'Enter') addDir(dirInput.value);
 		});
 
+		// --- Include subdirectories -------------------------------------------
+		new Setting(containerEl)
+			.setName('Include subdirectories')
+			.setDesc('Also scan folders nested inside the task directories.')
+			.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.includeSubdirectories)
+					.onChange((value) => {
+						this.plugin.settings.includeSubdirectories = value;
+						void this.plugin.onSettingsChanged();
+					});
+			});
+
 		// --- Default task file ------------------------------------------------
 		new Setting(containerEl)
 			.setName('Default task file')
@@ -96,7 +111,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
 		if (dirs.length === 0) {
 			listEl.createDiv({
 				cls: 'eisenhower-settings-empty',
-				text: 'No folders selected — the whole vault is scanned.',
+				text: 'No folders selected — only the default task file is scanned.',
 			});
 			return;
 		}

@@ -83,13 +83,6 @@ export default class EisenhowerPlugin extends Plugin {
 
 		this.addSettingTab(new EisenhowerSettingTab(this.app, this));
 
-		const isRelevant = (path: string): boolean => {
-			if (!path.endsWith('.md')) return false;
-			const roots = this.settings.taskDirectories;
-			if (roots.length === 0) return true;
-			return roots.some((r) => path === r || path.startsWith(`${r}/`));
-		};
-
 		const scheduleReload = (): void => {
 			if (this.reloadTimer !== null) window.clearTimeout(this.reloadTimer);
 			this.reloadTimer = window.setTimeout(() => {
@@ -102,22 +95,27 @@ export default class EisenhowerPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on('modify', (file: TAbstractFile) => {
-				if (isRelevant(file.path)) scheduleReload();
+				if (this.isRelevantPath(file.path)) scheduleReload();
 			}),
 		);
 		this.registerEvent(
 			this.app.vault.on('create', (file: TAbstractFile) => {
-				if (isRelevant(file.path)) scheduleReload();
+				if (this.isRelevantPath(file.path)) scheduleReload();
 			}),
 		);
 		this.registerEvent(
 			this.app.vault.on('delete', (file: TAbstractFile) => {
-				if (isRelevant(file.path)) scheduleReload();
+				if (this.isRelevantPath(file.path)) scheduleReload();
 			}),
 		);
 		this.registerEvent(
 			this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
-				if (isRelevant(file.path) || isRelevant(oldPath)) scheduleReload();
+				if (
+					this.isRelevantPath(file.path) ||
+					this.isRelevantPath(oldPath)
+				) {
+					scheduleReload();
+				}
 			}),
 		);
 
@@ -173,17 +171,28 @@ export default class EisenhowerPlugin extends Plugin {
 		}
 	}
 
-	private scanFiles(): TFile[] {
-		const all = this.app.vault.getMarkdownFiles();
-		const roots = this.settings.taskDirectories;
-		if (roots.length === 0) return all;
-		return all.filter((f) =>
-			roots.some((r) => f.path === r || f.path.startsWith(`${r}/`)),
-		);
+	isRelevantPath(path: string): boolean {
+		if (!path.endsWith('.md')) return false;
+		const { taskDirectories, defaultTaskFile, includeSubdirectories } =
+			this.settings;
+		if (defaultTaskFile !== '' && path === defaultTaskFile) return true;
+		return taskDirectories.some((root) => {
+			if (!path.startsWith(`${root}/`)) return false;
+			return (
+				includeSubdirectories ||
+				!path.slice(root.length + 1).includes('/')
+			);
+		});
+	}
+
+	taskFiles(): TFile[] {
+		return this.app.vault
+			.getMarkdownFiles()
+			.filter((f) => this.isRelevantPath(f.path));
 	}
 
 	async reloadNow(): Promise<void> {
-		const files = this.scanFiles();
+		const files = this.taskFiles();
 		const tasks: ParsedTask[] = [];
 		for (const file of files) {
 			try {

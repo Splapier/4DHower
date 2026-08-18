@@ -500,14 +500,14 @@ export class AddTaskModal extends Modal {
 
 		new Setting(contentEl)
 			.setName('File')
-			.setDesc('Where the task will be stored in your vault.')
+			.setDesc('Where the task will be stored. Only scanned files are listed.')
 			.addDropdown((dd) => {
-				const files = this.app.vault
-					.getMarkdownFiles()
+				const files = this.plugin
+					.taskFiles()
 					.map((f) => f.path)
 					.sort((a, b) => (a < b ? -1 : 1));
 				for (const p of files) dd.addOption(p, p);
-				if (files.indexOf(this.file) === -1) {
+				if (this.file !== '' && files.indexOf(this.file) === -1) {
 					dd.addOption(this.file, this.file);
 				}
 				dd.setValue(this.file);
