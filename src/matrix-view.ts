@@ -22,10 +22,11 @@ function fileBaseName(path: string): string {
 function getDragAfterElement(
 	container: HTMLElement,
 	y: number,
+	draggedRow?: HTMLElement | null,
 ): HTMLElement | null {
 	const rows = Array.from(
-		container.querySelectorAll<HTMLElement>('.eisenhower-row:not(.dragging)'),
-	);
+		container.querySelectorAll<HTMLElement>('.eisenhower-row'),
+	).filter((r) => r !== draggedRow);
 	let closest: { offset: number; el: HTMLElement } | null = null;
 	for (const row of rows) {
 		const rect = row.getBoundingClientRect();
@@ -208,16 +209,16 @@ export class EisenhowerMatrixView extends ItemView {
 		});
 	}
 
-	private placeDragRow(body: HTMLElement, row: HTMLElement, y: number): void {
-		const empty = body.querySelector<HTMLElement>('.eisenhower-empty');
-		if (empty) empty.remove();
-		const afterEl = getDragAfterElement(body, y);
-		if (afterEl === null) {
-			if (body.lastElementChild !== row) body.appendChild(row);
-		} else if (row.nextElementSibling !== afterEl) {
-			body.insertBefore(row, afterEl);
-		}
-	}
+  private placeDragRow(body: HTMLElement, row: HTMLElement, y: number): void {
+    const empty = body.querySelector<HTMLElement>('.eisenhower-empty');
+    if (empty) empty.remove();
+    const afterEl = getDragAfterElement(body, y, row);
+    if (afterEl === null) {
+      if (body.lastElementChild !== row) body.appendChild(row);
+    } else if (row.nextElementSibling !== afterEl) {
+      body.insertBefore(row, afterEl);
+    }
+  }
 
 	private cancelDragFrame(): void {
 		if (this.dragFrame !== null) {
@@ -389,7 +390,7 @@ export class EisenhowerMatrixView extends ItemView {
 			this.drag = { id: t.id, row };
 			this.cancelDragFrame();
 			this.pendingDrag = null;
-			window.setTimeout(() => row.addClass('dragging'), 0);
+			row.addClass('dragging');
 		});
 		this.registerDomEvent(row, 'dragend', () => {
 			row.removeClass('dragging');
