@@ -52,6 +52,7 @@ export class EisenhowerMatrixView extends ItemView {
 	private pendingDrag: { body: HTMLElement; y: number } | null = null;
 	private rows = new Map<string, HTMLElement>();
 	private lastFilterKey: string | null = null;
+	private dragStartTick = 0;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EisenhowerPlugin) {
 		super(leaf);
@@ -76,6 +77,7 @@ export class EisenhowerMatrixView extends ItemView {
 		this.rows.clear();
 		this.lastFilterKey = null;
 		this.drag = null;
+		this.dragStartTick = 0;
 		el.addClass('eisenhower-view');
 
 		const header = el.createDiv({ cls: 'eisenhower-header' });
@@ -123,6 +125,7 @@ export class EisenhowerMatrixView extends ItemView {
 	async onClose(): Promise<void> {
 		this.cancelDragFrame();
 		this.drag = null;
+		this.dragStartTick = 0;
 		this.rows.clear();
 		this.contentEl.empty();
 	}
@@ -182,6 +185,7 @@ export class EisenhowerMatrixView extends ItemView {
 					const d = this.drag;
 					this.pendingDrag = null;
 					if (pending === null || d === null) return;
+					if (this.dragStartTick === 0) return;
 					for (const other of Object.values(this.containers)) {
 						if (other !== undefined && other !== pending.body) {
 							other.removeClass('drag-over');
@@ -209,8 +213,10 @@ export class EisenhowerMatrixView extends ItemView {
 			).map((r) => r.dataset.id ?? '');
 			const index = Math.max(0, ids.indexOf(id));
 			this.dropHandled = true;
+			const targetBucket = bucket;
+			const targetIndex = Math.max(0, Math.min(index, ids.length));
 			this.clearDnDState();
-			void this.plugin.moveTask(id, bucket, index);
+			void this.plugin.moveTask(id, targetBucket, targetIndex);
 		});
 	}
 
@@ -235,6 +241,7 @@ export class EisenhowerMatrixView extends ItemView {
 
 	private clearDnDState(): void {
 		this.drag = null;
+		this.dragStartTick = 0;
 		this.cancelDragFrame();
 		for (const body of Object.values(this.containers)) {
 			body?.removeClass('drag-over');
@@ -393,7 +400,10 @@ export class EisenhowerMatrixView extends ItemView {
 				evt.dataTransfer.effectAllowed = 'move';
 			}
 			this.dropHandled = false;
+			this.dragStartTick = performance.now();
 			this.drag = { id: t.id, row };
+			this.cancelDragFrame();
+			this.pendingDrag = null;
 			window.setTimeout(() => row.addClass('dragging'), 0);
 		});
 		this.registerDomEvent(row, 'dragend', () => {
@@ -401,9 +411,11 @@ export class EisenhowerMatrixView extends ItemView {
 			this.cancelDragFrame();
 			if (this.dropHandled) {
 				this.dropHandled = false;
+				this.dragStartTick = 0;
 				return;
 			}
 			this.clearDnDState();
+			this.dragStartTick = 0;
 			this.plugin.notify();
 		});
 
