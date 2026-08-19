@@ -139,6 +139,11 @@
 	font-style: italic;
 }
 
+.eisenhower-chip.eisenhower-hidden,
+.eisenhower-filternomatch.eisenhower-hidden {
+	display: none;
+}
+
 .eisenhower-inboxsearchbar {
 	padding: 4px 6px 0;
 	flex-shrink: 0;

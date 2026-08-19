@@ -53,7 +53,12 @@ export class EisenhowerMatrixView extends ItemView {
 	private dragFrame: number | null = null;
 	private pendingDrag: { body: HTMLElement; y: number } | null = null;
 	private rows = new Map<string, HTMLElement>();
+	private rowParts = new Map<string, { check: HTMLInputElement; title: HTMLElement }>();
 	private lastFilterKey: string | null = null;
+	private filterChips = new Map<string, HTMLElement>();
+	private filterChipsEl: HTMLElement | null = null;
+	private filterNoMatchEl: HTMLElement | null = null;
+	private lastFilesKey: string | null = null;
 	private dragStartTick = 0;
 
 	constructor(leaf: WorkspaceLeaf, plugin: EisenhowerPlugin) {
@@ -77,11 +82,16 @@ export class EisenhowerMatrixView extends ItemView {
 		const el = this.contentEl;
 		el.empty();
 		this.rows.clear();
+		this.rowParts.clear();
 		this.lastFilterKey = null;
 		this.drag = null;
 		this.dragStartTick = 0;
 		this.inboxQuery = '';
 		this.filterQuery = '';
+		this.filterChips.clear();
+		this.filterChipsEl = null;
+		this.filterNoMatchEl = null;
+		this.lastFilesKey = null;
 		el.addClass('eisenhower-view');
 
 		const header = el.createDiv({ cls: 'eisenhower-header' });
@@ -131,6 +141,11 @@ export class EisenhowerMatrixView extends ItemView {
 		this.drag = null;
 		this.dragStartTick = 0;
 		this.rows.clear();
+		this.rowParts.clear();
+		this.filterChips.clear();
+		this.filterChipsEl = null;
+		this.filterNoMatchEl = null;
+		this.lastFilesKey = null;
 		this.contentEl.empty();
 	}
 
@@ -170,7 +185,7 @@ export class EisenhowerMatrixView extends ItemView {
 			search.value = this.inboxQuery;
 			this.registerDomEvent(search, 'input', () => {
 				this.inboxQuery = search.value;
-				this.render();
+				this.applyInboxFilter();
 			});
 		}
 		const body = box.createDiv({ cls: 'eisenhower-body' });
@@ -282,14 +297,43 @@ export class EisenhowerMatrixView extends ItemView {
 			this.filterQuery;
 		if (key === this.lastFilterKey) return;
 		this.lastFilterKey = key;
-		const prevSearch = filterRow.querySelector<HTMLInputElement>(
-			'.eisenhower-filtersearch',
-		);
-		const searchFocused =
-			prevSearch !== null && document.activeElement === prevSearch;
-		const searchCaret =
-			searchFocused && prevSearch !== null ? prevSearch.selectionStart ?? 0 : 0;
-		filterRow.empty();
+
+		if (this.filterChipsEl === null) {
+			this.buildFilterRow(filterRow);
+		}
+		const filesKey = files.join('\u0001');
+		if (filesKey !== this.lastFilesKey) {
+			this.filterChipsEl?.empty();
+			this.filterChips.clear();
+			for (const f of files) {
+				this.filterChips.set(f, this.createFilterChip(f));
+			}
+			this.lastFilesKey = filesKey;
+		}
+		const q = this.filterQuery.trim().toLowerCase();
+		let visibleCount = 0;
+		for (const f of files) {
+			const chip = this.filterChips.get(f);
+			if (!chip) continue;
+			const visible =
+				q === '' ||
+				f.toLowerCase().includes(q) ||
+				fileBaseName(f).toLowerCase().includes(q);
+			chip.classList.toggle('eisenhower-hidden', !visible);
+			if (visible) visibleCount += 1;
+			const active = this.filter.indexOf(f) !== -1;
+			chip.classList.toggle('is-active', active);
+			chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+		}
+		if (this.filterNoMatchEl) {
+			this.filterNoMatchEl.classList.toggle(
+				'eisenhower-hidden',
+				visibleCount !== 0,
+			);
+		}
+	}
+
+	private buildFilterRow(filterRow: HTMLElement): void {
 		const setting = new Setting(filterRow)
 			.setName('Filter')
 			.setDesc('Show tasks from the selected files. None selected shows all.');
@@ -304,51 +348,33 @@ export class EisenhowerMatrixView extends ItemView {
 		search.value = this.filterQuery;
 		this.registerDomEvent(search, 'input', () => {
 			this.filterQuery = search.value;
-			this.render();
+			this.renderFilter();
 		});
 		const chips = control.createDiv({ cls: 'eisenhower-filterchips' });
-		const q = this.filterQuery.trim().toLowerCase();
-		for (const f of files) {
-			if (
-				q !== '' &&
-				!f.toLowerCase().includes(q) &&
-				!fileBaseName(f).toLowerCase().includes(q)
-			) {
-				continue;
-			}
-			const active = this.filter.indexOf(f) !== -1;
-			const chip = chips.createEl('button', {
-				cls: 'eisenhower-chip',
-				attr: {
-					type: 'button',
-					title: f,
-					'aria-pressed': active ? 'true' : 'false',
-				},
-			});
-			if (active) chip.addClass('is-active');
-			chip.createSpan({ text: fileBaseName(f), cls: 'eisenhower-chip-text' });
-			this.registerDomEvent(chip, 'click', () => {
-				const idx = this.filter.indexOf(f);
-				if (idx === -1) this.filter.push(f);
-				else this.filter.splice(idx, 1);
-				this.render();
-			});
+		this.filterChipsEl = chips;
+		this.filterNoMatchEl = control.createSpan({
+			text: 'No matching filters',
+			cls: 'eisenhower-filternomatch eisenhower-hidden',
+		});
+	}
+
+	private createFilterChip(f: string): HTMLElement {
+		const parent = this.filterChipsEl;
+		if (!parent) {
+			throw new Error('Filter chips container is not initialized.');
 		}
-		if (chips.childElementCount === 0) {
-			chips.createSpan({
-				text: 'No matching filters',
-				cls: 'eisenhower-filternomatch',
-			});
-		}
-		if (searchFocused) {
-			const newSearch = filterRow.querySelector<HTMLInputElement>(
-				'.eisenhower-filtersearch',
-			);
-			if (newSearch) {
-				newSearch.focus();
-				newSearch.setSelectionRange(searchCaret, searchCaret);
-			}
-		}
+		const chip = parent.createEl('button', {
+			cls: 'eisenhower-chip',
+			attr: { type: 'button', title: f, 'aria-pressed': 'false' },
+		});
+		chip.createSpan({ text: fileBaseName(f), cls: 'eisenhower-chip-text' });
+		this.registerDomEvent(chip, 'click', () => {
+			const idx = this.filter.indexOf(f);
+			if (idx === -1) this.filter.push(f);
+			else this.filter.splice(idx, 1);
+			this.render();
+		});
+		return chip;
 	}
 
 	render(state?: MatrixState): void {
@@ -378,13 +404,12 @@ export class EisenhowerMatrixView extends ItemView {
 			if (!wanted.has(id)) {
 				row.remove();
 				this.rows.delete(id);
+				this.rowParts.delete(id);
 			}
 		}
 		for (const bucket of BUCKETS) {
 			const body = this.containers[bucket];
 			if (!body) continue;
-			const emptyEl = body.querySelector<HTMLElement>('.eisenhower-empty');
-			if (emptyEl) emptyEl.remove();
 			const shown = desired[bucket];
 			for (const t of shown) {
 				let row = this.rows.get(t.id);
@@ -394,22 +419,85 @@ export class EisenhowerMatrixView extends ItemView {
 				} else {
 					this.updateRow(row, t);
 				}
-				body.appendChild(row);
 			}
+			this.ensureOrder(body, shown);
+			const emptyEl = body.querySelector<HTMLElement>('.eisenhower-empty');
+			if (emptyEl) emptyEl.remove();
 			if (shown.length === 0) {
 				body.createDiv({ cls: 'eisenhower-empty', text: 'No tasks' });
 			}
 		}
 	}
 
+	private applyInboxFilter(): void {
+		const body = this.containers['inbox'];
+		if (!body) return;
+		const st = this.plugin.state;
+		const byId = new Map(this.plugin.tasks.map((t) => [t.id, t]));
+		const clearedSet = new Set(st.clearedIds);
+		const filterSet = this.filter.length > 0 ? new Set(this.filter) : null;
+		const inboxQ = this.inboxQuery.trim().toLowerCase();
+		const shown: ParsedTask[] = [];
+		for (const id of st.bucketOrder['inbox'] ?? []) {
+			if (clearedSet.has(id)) continue;
+			const t = byId.get(id);
+			if (!t) continue;
+			if (filterSet !== null && !filterSet.has(t.file)) continue;
+			if (inboxQ !== '' && !t.title.toLowerCase().includes(inboxQ)) continue;
+			shown.push(t);
+		}
+		const shownIds = new Set(shown.map((t) => t.id));
+		for (const [id, row] of Array.from(this.rows)) {
+			if (row.parentElement !== body) continue;
+			if (!shownIds.has(id)) {
+				row.remove();
+				this.rows.delete(id);
+				this.rowParts.delete(id);
+			}
+		}
+		for (const t of shown) {
+			let row = this.rows.get(t.id);
+			if (row === undefined) {
+				row = this.createRow(body, t);
+				this.rows.set(t.id, row);
+			} else {
+				this.updateRow(row, t);
+			}
+		}
+		this.ensureOrder(body, shown);
+		const emptyEl = body.querySelector<HTMLElement>('.eisenhower-empty');
+		if (emptyEl) emptyEl.remove();
+		if (shown.length === 0) {
+			body.createDiv({ cls: 'eisenhower-empty', text: 'No tasks' });
+		}
+	}
+
+	private ensureOrder(body: HTMLElement, shown: ParsedTask[]): void {
+		const desiredRows: HTMLElement[] = [];
+		for (const t of shown) {
+			const row = this.rows.get(t.id);
+			if (row) desiredRows.push(row);
+		}
+		const currentRows = Array.from(
+			body.querySelectorAll<HTMLElement>('.eisenhower-row'),
+		);
+		if (
+			currentRows.length === desiredRows.length &&
+			currentRows.every((r, i) => r === desiredRows[i])
+		) {
+			return;
+		}
+		for (const row of desiredRows) body.appendChild(row);
+	}
+
 	private updateRow(row: HTMLElement, t: ParsedTask): void {
-		const check = row.querySelector<HTMLInputElement>('.eisenhower-check');
-		if (check && check.checked !== t.completed) check.checked = t.completed;
+		const parts = this.rowParts.get(t.id);
+		if (!parts) return;
+		if (parts.check.checked !== t.completed) parts.check.checked = t.completed;
 		const key = `${t.file}\u0001${t.title}`;
 		if (row.dataset.titleKey === key) return;
 		row.dataset.titleKey = key;
-		const titleEl = row.querySelector<HTMLElement>('.eisenhower-rowtitle');
-		if (titleEl === null) return;
+		const titleEl = parts.title;
 		titleEl.empty();
 		MarkdownRenderer.render(this.app, t.title, titleEl, t.file, this).catch(
 			(err: unknown) => {
@@ -437,6 +525,7 @@ export class EisenhowerMatrixView extends ItemView {
 		});
 
 		const titleEl = row.createSpan({ cls: 'eisenhower-rowtitle' });
+		this.rowParts.set(t.id, { check, title: titleEl });
 		MarkdownRenderer.render(this.app, t.title, titleEl, t.file, this		).catch(
 			(err: unknown) => {
 				titleEl.setText(t.title);
