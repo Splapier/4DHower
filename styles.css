@@ -162,7 +162,7 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-s);
 	cursor: grab;
-	min-height: 24px;
+	min-height: 48px;
 }
 
 .eisenhower-row:hover {
@@ -265,7 +265,7 @@
 
 .eisenhower-inbox .eisenhower-row {
 	padding: 2px 6px;
-	min-height: 22px;
+	min-height: 48px;
 }
 
 .eisenhower-inbox .eisenhower-rowtitle {

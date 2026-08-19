@@ -228,6 +228,25 @@ export class EisenhowerMatrixView extends ItemView {
 		this.pendingDrag = null;
 	}
 
+	private commitDraggedRow(row: HTMLElement): void {
+		const id = row.dataset.id ?? '';
+		const box = row.closest<HTMLElement>('.eisenhower-quadrant');
+		const bucket = box?.dataset.bucket as Bucket | undefined;
+		if (id === '' || bucket === undefined) return;
+		const body = box?.querySelector<HTMLElement>('.eisenhower-body');
+		if (!body) return;
+		const ids = Array.from(
+			body.querySelectorAll<HTMLElement>('.eisenhower-row'),
+		).map((r) => r.dataset.id ?? '');
+		const index = Math.max(0, ids.indexOf(id));
+		const current = bucketOf(this.plugin.state, id);
+		if (current !== null && current === bucket) {
+			const order = this.plugin.state.bucketOrder[bucket] ?? [];
+			if (order.indexOf(id) === index) return;
+		}
+		void this.plugin.moveTask(id, bucket, index);
+	}
+
 	private clearDnDState(): void {
 		this.drag = null;
 		this.dragStartTick = 0;
@@ -400,9 +419,9 @@ export class EisenhowerMatrixView extends ItemView {
 				this.dragStartTick = 0;
 				return;
 			}
+			this.commitDraggedRow(row);
 			this.clearDnDState();
 			this.dragStartTick = 0;
-			this.plugin.notify();
 		});
 
 		return row;
