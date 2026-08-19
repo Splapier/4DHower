@@ -1,6 +1,5 @@
 import {
 	App,
-	DropdownComponent,
 	ItemView,
 	MarkdownRenderer,
 	Menu,
@@ -43,10 +42,9 @@ export class EisenhowerMatrixView extends ItemView {
 	static readonly VIEW_TYPE = 'eisenhower-matrix';
 
 	plugin: EisenhowerPlugin;
-	filter: string | null = null;
+	filter: string[] = [];
 	containers: Partial<Record<Bucket, HTMLElement>> = {};
 	filterRow: HTMLElement | null = null;
-	filterDropdown: DropdownComponent | null = null;
 	private drag: { id: string; row: HTMLElement } | null = null;
 	private dropHandled = false;
 	private dragFrame: number | null = null;
@@ -258,24 +256,35 @@ export class EisenhowerMatrixView extends ItemView {
 		const filterRow = this.filterRow;
 		if (!filterRow) return;
 		const files = Array.from(new Set(this.plugin.tasks.map((t) => t.file))).sort();
-		const key = files.join('\u0001') + '\u0001' + (this.filter ?? '');
+		this.filter = this.filter.filter((f) => files.indexOf(f) !== -1);
+		const key =
+			files.join('\u0001') + '\u0001' + [...this.filter].sort().join('\u0001');
 		if (key === this.lastFilterKey) return;
 		this.lastFilterKey = key;
 		filterRow.empty();
-		this.filterDropdown = null;
-		new Setting(filterRow)
+		const setting = new Setting(filterRow)
 			.setName('Filter')
-			.setDesc('Show tasks from one file.')
-			.addDropdown((dd) => {
-				this.filterDropdown = dd;
-				dd.addOption('', 'All files');
-				for (const f of files) dd.addOption(f, f);
-				dd.setValue(this.filter ?? '');
-				dd.onChange((value) => {
-					this.filter = value === '' ? null : value;
-					this.render();
-				});
+			.setDesc('Show tasks from the selected files. None selected shows all.');
+		const chips = setting.controlEl.createDiv({ cls: 'eisenhower-filterchips' });
+		for (const f of files) {
+			const active = this.filter.indexOf(f) !== -1;
+			const chip = chips.createEl('button', {
+				cls: 'eisenhower-chip',
+				attr: {
+					type: 'button',
+					title: f,
+					'aria-pressed': active ? 'true' : 'false',
+				},
 			});
+			if (active) chip.addClass('is-active');
+			chip.createSpan({ text: fileBaseName(f), cls: 'eisenhower-chip-text' });
+			this.registerDomEvent(chip, 'click', () => {
+				const idx = this.filter.indexOf(f);
+				if (idx === -1) this.filter.push(f);
+				else this.filter.splice(idx, 1);
+				this.render();
+			});
+		}
 	}
 
 	render(state?: MatrixState): void {
@@ -283,7 +292,7 @@ export class EisenhowerMatrixView extends ItemView {
 		this.renderFilter();
 		const byId = new Map(this.plugin.tasks.map((t) => [t.id, t]));
 		const clearedSet = new Set(st.clearedIds);
-		const filter = this.filter;
+		const filterSet = this.filter.length > 0 ? new Set(this.filter) : null;
 		const wanted = new Set<string>();
 		const desired = {} as Record<Bucket, ParsedTask[]>;
 		for (const bucket of BUCKETS) {
@@ -292,7 +301,7 @@ export class EisenhowerMatrixView extends ItemView {
 				if (clearedSet.has(id)) continue;
 				const t = byId.get(id);
 				if (!t) continue;
-				if (filter !== null && t.file !== filter) continue;
+				if (filterSet !== null && !filterSet.has(t.file)) continue;
 				list.push(t);
 				wanted.add(t.id);
 			}
