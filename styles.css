@@ -205,6 +205,7 @@
 	border-radius: var(--radius-s);
 	cursor: grab;
 	min-height: 48px;
+	flex-shrink: 0;
 }
 
 .eisenhower-row:hover {
