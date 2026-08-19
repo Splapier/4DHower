@@ -380,8 +380,93 @@
 	align-items: center;
 }
 
-.eisenhower-settings-addrow input {
+.eisenhower-suggest-wrap {
+	position: relative;
 	flex: 1;
+	display: flex;
+}
+
+.eisenhower-suggest-wrap input {
+	width: 100%;
+}
+
+.eisenhower-suggest {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	z-index: 100;
+	min-width: 100%;
+	width: max-content;
+	max-width: min(560px, calc(100vw - 48px));
+	max-height: 240px;
+	overflow-y: auto;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
+	padding: 4px;
+}
+
+.eisenhower-suggest-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 6px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	font-size: 0.9em;
+}
+
+.eisenhower-suggest-item.is-selected {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.eisenhower-suggest-item.is-added {
+	opacity: 0.5;
+}
+
+.eisenhower-suggest-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+
+.eisenhower-suggest-item.is-selected .eisenhower-suggest-icon {
+	color: var(--text-on-accent);
+}
+
+.eisenhower-suggest-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.eisenhower-suggest-text {
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.eisenhower-suggest-tag {
+	flex-shrink: 0;
+	font-size: 0.75em;
+	color: var(--text-muted);
+}
+
+.eisenhower-suggest-item.is-selected .eisenhower-suggest-tag {
+	color: var(--text-on-accent);
+}
+
+.eisenhower-settings-diricon {
+	display: inline-flex;
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+
+.eisenhower-settings-diricon svg {
+	width: 14px;
+	height: 14px;
 }
 
 .eisenhower-settings-empty {

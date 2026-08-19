@@ -180,6 +180,7 @@ export default class EisenhowerPlugin extends Plugin {
 			this.settings;
 		if (defaultTaskFile !== '' && path === defaultTaskFile) return true;
 		return taskDirectories.some((root) => {
+			if (root.endsWith('.md')) return path === root;
 			if (!path.startsWith(`${root}/`)) return false;
 			return (
 				includeSubdirectories ||

@@ -1,5 +1,10 @@
-import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
+import { App, Notice, PluginSettingTab, Setting, setIcon } from 'obsidian';
 import type EisenhowerPlugin from './main';
+
+interface DirSuggestion {
+	path: string;
+	kind: 'folder' | 'file';
+}
 
 export interface EisenhowerSettings {
 	taskDirectories: string[];
@@ -34,7 +39,7 @@ export class EisenhowerSettingTab extends PluginSettingTab {
 		const dirsSetting = new Setting(containerEl)
 			.setName('Task directories')
 			.setDesc(
-				'Folders to scan for tasks, in addition to the default task file.',
+				'Folders or individual files to scan for tasks, in addition to the default task file. Start typing to search.',
 			);
 		const dirsList = dirsSetting.settingEl.createDiv({
 			cls: 'eisenhower-settings-dirs',
@@ -44,35 +49,171 @@ export class EisenhowerSettingTab extends PluginSettingTab {
 		const addRow = dirsSetting.settingEl.createDiv({
 			cls: 'eisenhower-settings-addrow',
 		});
-		const dirInput = addRow.createEl('input', {
+		const inputWrap = addRow.createDiv({ cls: 'eisenhower-suggest-wrap' });
+		const dirInput = inputWrap.createEl('input', {
 			type: 'text',
-			attr: { placeholder: 'Folder path, e.g. notes/tasks' },
+			attr: { placeholder: 'Type a folder or file path…' },
 		});
+		const dropdown = inputWrap.createDiv({ cls: 'eisenhower-suggest' });
+		dropdown.hide();
 		const addBtn = addRow.createEl('button', { cls: 'mod-cta', attr: { type: 'button' } });
 		addBtn.setText('Add');
 
-		const addDir = (raw: string): void => {
-			const dir = raw.trim();
-			if (!dir) return;
-			const folder = app.vault.getFolderByPath(dir);
-			if (!folder) {
-				new Notice(`Folder not found: ${dir}`, 5000);
+		let current: DirSuggestion[] = [];
+		let highlight = -1;
+
+		const rankMatch = (path: string, q: string): number => {
+			if (q === '') return 0;
+			const lower = path.toLowerCase();
+			if (lower === q) return 1;
+			if (lower.startsWith(q)) return 2;
+			if (lower.split('/').some((seg) => seg.startsWith(q))) return 3;
+			return 4;
+		};
+
+		const computeSuggestions = (query: string): DirSuggestion[] => {
+			const q = query.trim().toLowerCase();
+			const byRank = (a: string, b: string): number => {
+				const ra = rankMatch(a, q);
+				const rb = rankMatch(b, q);
+				return ra !== rb ? ra - rb : a < b ? -1 : 1;
+			};
+			const folders = app.vault
+				.getAllFolders(false)
+				.map((f) => f.path)
+				.filter((p) => q === '' || p.toLowerCase().includes(q))
+				.sort(byRank);
+			const files =
+				q === ''
+					? []
+					: app.vault
+						.getMarkdownFiles()
+						.map((f) => f.path)
+						.filter((p) => p.toLowerCase().includes(q))
+						.sort(byRank);
+			const out: DirSuggestion[] = [];
+			for (const p of folders) out.push({ path: p, kind: 'folder' });
+			for (const p of files) out.push({ path: p, kind: 'file' });
+			return out.slice(0, 80);
+		};
+
+		const updateHighlight = (): void => {
+			const items = dropdown.querySelectorAll<HTMLElement>(
+				'.eisenhower-suggest-item',
+			);
+			items.forEach((el, i) => {
+				el.toggleClass('is-selected', i === highlight);
+			});
+			const sel = dropdown.querySelector<HTMLElement>(
+				'.eisenhower-suggest-item.is-selected',
+			);
+			if (sel) sel.scrollIntoView({ block: 'nearest' });
+		};
+
+		const renderDropdown = (): void => {
+			dropdown.empty();
+			if (current.length === 0) {
+				dropdown.hide();
 				return;
 			}
-			if (this.plugin.settings.taskDirectories.includes(folder.path)) {
-				new Notice('Folder already listed.', 3000);
+			dropdown.show();
+			const added = new Set(this.plugin.settings.taskDirectories);
+			for (let i = 0; i < current.length; i++) {
+				const s = current[i];
+				if (!s) continue;
+				const isAdded = added.has(s.path);
+				const item = dropdown.createDiv({ cls: 'eisenhower-suggest-item' });
+				if (isAdded) item.addClass('is-added');
+				const iconEl = item.createSpan({ cls: 'eisenhower-suggest-icon' });
+				setIcon(iconEl, s.kind === 'folder' ? 'folder' : 'file-text');
+				item.createSpan({ text: s.path, cls: 'eisenhower-suggest-text' });
+				if (isAdded) {
+					item.createSpan({ text: 'added', cls: 'eisenhower-suggest-tag' });
+				}
+				item.addEventListener('mousedown', (evt: MouseEvent) => {
+					evt.preventDefault();
+					addPath(s.path);
+				});
+				item.addEventListener('mouseenter', () => {
+					if (highlight !== i) {
+						highlight = i;
+						updateHighlight();
+					}
+				});
+			}
+			updateHighlight();
+		};
+
+		const refresh = (): void => {
+			current = computeSuggestions(dirInput.value);
+			highlight = current.length > 0 ? 0 : -1;
+			renderDropdown();
+		};
+
+		const addPath = (raw: string): void => {
+			const path = raw.trim();
+			if (!path) return;
+			const settings = this.plugin.settings;
+			if (settings.taskDirectories.includes(path)) {
+				new Notice('Already listed.', 3000);
 				return;
 			}
-			this.plugin.settings.taskDirectories.push(folder.path);
+			if (path.endsWith('.md')) {
+				if (!app.vault.getFileByPath(path)) {
+					new Notice(`File not found: ${path}`, 5000);
+					return;
+				}
+			} else if (!app.vault.getFolderByPath(path)) {
+				new Notice(`Folder not found: ${path}`, 5000);
+				return;
+			}
+			settings.taskDirectories.push(path);
+			dirInput.value = '';
+			current = [];
+			highlight = -1;
+			dropdown.hide();
 			void this.plugin.onSettingsChanged();
 			this.renderDirList(dirsList);
 		};
 
 		addBtn.addEventListener('click', () => {
-			addDir(dirInput.value);
+			addPath(dirInput.value);
+		});
+		dirInput.addEventListener('input', () => {
+			refresh();
+		});
+		dirInput.addEventListener('focus', () => {
+			refresh();
+		});
+		dirInput.addEventListener('blur', () => {
+			window.setTimeout(() => dropdown.hide(), 150);
 		});
 		dirInput.addEventListener('keydown', (evt: KeyboardEvent) => {
-			if (evt.key === 'Enter') addDir(dirInput.value);
+			if (evt.key === 'ArrowDown') {
+				evt.preventDefault();
+				if (current.length === 0) return;
+				highlight =
+					highlight === -1 ? 0 : (highlight + 1) % current.length;
+				updateHighlight();
+			} else if (evt.key === 'ArrowUp') {
+				evt.preventDefault();
+				if (current.length === 0) return;
+				highlight =
+					highlight === -1
+						? current.length - 1
+						: (highlight - 1 + current.length) % current.length;
+				updateHighlight();
+			} else if (evt.key === 'Enter') {
+				evt.preventDefault();
+				const highlighted =
+					highlight !== -1 && highlight < current.length
+						? current[highlight]
+						: undefined;
+				addPath(highlighted ? highlighted.path : dirInput.value);
+			} else if (evt.key === 'Escape') {
+				evt.preventDefault();
+				dropdown.hide();
+			}
 		});
 
 		// --- Include subdirectories -------------------------------------------
@@ -111,12 +252,15 @@ export class EisenhowerSettingTab extends PluginSettingTab {
 		if (dirs.length === 0) {
 			listEl.createDiv({
 				cls: 'eisenhower-settings-empty',
-				text: 'No folders selected — only the default task file is scanned.',
+				text: 'Nothing selected — only the default task file is scanned.',
 			});
 			return;
 		}
 		for (const dir of dirs) {
+			const isFile = dir.endsWith('.md');
 			const row = listEl.createDiv({ cls: 'eisenhower-settings-dirrow' });
+			const iconEl = row.createSpan({ cls: 'eisenhower-settings-diricon' });
+			setIcon(iconEl, isFile ? 'file-text' : 'folder');
 			row.createSpan({ text: dir, cls: 'eisenhower-settings-dir' });
 			const removeBtn = row.createEl('button', {
 				cls: 'eisenhower-settings-remove',
