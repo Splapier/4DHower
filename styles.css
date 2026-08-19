@@ -490,7 +490,6 @@
 	left: 0;
 	z-index: 100;
 	min-width: 100%;
-	width: max-content;
 	max-width: min(560px, calc(100vw - 48px));
 	max-height: 240px;
 	overflow-y: auto;
@@ -537,9 +536,9 @@
 
 .eisenhower-suggest-text {
 	flex: 1;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	min-width: 0;
+	white-space: normal;
+	word-break: break-word;
 }
 
 .eisenhower-suggest-tag {

@@ -1,6 +1,6 @@
 {
 	"id": "4dhower",
-	"name": "Eisenhower Matrix",
+	"name": "4DHower",
 	"version": "0.1.0",
 	"minAppVersion": "1.7.2",
 	"description": "Eisenhower matrix style todo list built on your markdown tasks: 2x2 grid, inbox, drag and drop, and a one-click 'complete the day'.",
