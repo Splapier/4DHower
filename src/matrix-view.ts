@@ -688,10 +688,13 @@ export class EisenhowerMatrixView extends ItemView {
 	}
 }
 
+const ADD_BUCKET_ORDER: readonly Bucket[] = ['inbox', 'q1', 'q2', 'q3', 'q4'];
+
 export class AddTaskModal extends Modal {
 	plugin: EisenhowerPlugin;
 	taskInputEl: HTMLInputElement | null = null;
 	file: string;
+	bucket: Bucket = 'inbox';
 
 	constructor(app: App, plugin: EisenhowerPlugin) {
 		super(app);
@@ -713,21 +716,131 @@ export class AddTaskModal extends Modal {
 			if (evt.key === 'Enter') void this.submit();
 		});
 
-		new Setting(contentEl)
+		const fileSetting = new Setting(contentEl)
 			.setName('File')
-			.setDesc('Where the task will be stored. Only scanned files are listed.')
-			.addDropdown((dd) => {
-				const files = this.plugin
-					.taskFiles()
-					.map((f) => f.path)
-					.sort((a, b) => (a < b ? -1 : 1));
-				for (const p of files) dd.addOption(p, p);
-				if (this.file !== '' && files.indexOf(this.file) === -1) {
-					dd.addOption(this.file, this.file);
+			.setDesc(
+				'Where the task will be stored. Start typing to filter scanned files.',
+			);
+		const control = fileSetting.controlEl;
+		const inputWrap = control.createDiv({ cls: 'eisenhower-suggest-wrap' });
+		const fileInput = inputWrap.createEl('input', {
+			type: 'text',
+			placeholder: 'Filter files…',
+			attr: { 'aria-label': 'Filter files' },
+		});
+		fileInput.value = this.file;
+		const dropdown = inputWrap.createDiv({ cls: 'eisenhower-suggest' });
+		dropdown.hide();
+
+		let current: FileSuggestion[] = [];
+		let highlight = -1;
+
+		const updateHighlight = (): void => {
+			const items = dropdown.querySelectorAll<HTMLElement>(
+				'.eisenhower-suggest-item',
+			);
+			items.forEach((el, i) => {
+				el.toggleClass('is-selected', i === highlight);
+			});
+			const sel = dropdown.querySelector<HTMLElement>(
+				'.eisenhower-suggest-item.is-selected',
+			);
+			if (sel) sel.scrollIntoView({ block: 'nearest' });
+		};
+
+		const choose = (raw: string): void => {
+			const path = raw.trim();
+			if (!path) return;
+			this.file = path;
+			fileInput.value = path;
+			current = [];
+			highlight = -1;
+			dropdown.hide();
+		};
+
+		const renderDropdown = (): void => {
+			dropdown.empty();
+			if (current.length === 0) {
+				dropdown.hide();
+				return;
+			}
+			dropdown.show();
+			for (let i = 0; i < current.length; i++) {
+				const s = current[i];
+				if (!s) continue;
+				const item = dropdown.createDiv({ cls: 'eisenhower-suggest-item' });
+				const iconEl = item.createSpan({ cls: 'eisenhower-suggest-icon' });
+				setIcon(iconEl, 'file-text');
+				item.createSpan({ text: s.path, cls: 'eisenhower-suggest-text' });
+				if (s.create) {
+					item.createSpan({
+						text: 'will be created',
+						cls: 'eisenhower-suggest-tag',
+					});
 				}
-				dd.setValue(this.file);
+				item.addEventListener('mousedown', (evt: MouseEvent) => {
+					evt.preventDefault();
+					choose(s.path);
+				});
+				item.addEventListener('mouseenter', () => {
+					if (highlight !== i) {
+						highlight = i;
+						updateHighlight();
+					}
+				});
+			}
+			updateHighlight();
+		};
+
+		const refresh = (): void => {
+			current = this.computeFileSuggestions(fileInput.value);
+			highlight = current.length > 0 ? 0 : -1;
+			renderDropdown();
+		};
+
+		fileInput.addEventListener('input', () => refresh());
+		fileInput.addEventListener('focus', () => refresh());
+		fileInput.addEventListener('blur', () => {
+			window.setTimeout(() => dropdown.hide(), 150);
+		});
+		fileInput.addEventListener('keydown', (evt: KeyboardEvent) => {
+			if (evt.key === 'ArrowDown') {
+				evt.preventDefault();
+				if (current.length === 0) return;
+				highlight =
+					highlight === -1 ? 0 : (highlight + 1) % current.length;
+				updateHighlight();
+			} else if (evt.key === 'ArrowUp') {
+				evt.preventDefault();
+				if (current.length === 0) return;
+				highlight =
+					highlight === -1
+						? current.length - 1
+						: (highlight - 1 + current.length) % current.length;
+				updateHighlight();
+			} else if (evt.key === 'Enter') {
+				evt.preventDefault();
+				const highlighted =
+					highlight !== -1 && highlight < current.length
+						? current[highlight]
+						: undefined;
+				choose(highlighted ? highlighted.path : fileInput.value);
+			} else if (evt.key === 'Escape') {
+				evt.preventDefault();
+				dropdown.hide();
+			}
+		});
+
+		new Setting(contentEl)
+			.setName('Quadrant')
+			.setDesc('Where the new task will be placed.')
+			.addDropdown((dd) => {
+				for (const b of ADD_BUCKET_ORDER) {
+					dd.addOption(b, BUCKET_DEFS[b].title);
+				}
+				dd.setValue(this.bucket);
 				dd.onChange((value) => {
-					this.file = value;
+					this.bucket = value as Bucket;
 				});
 			});
 
@@ -746,14 +859,39 @@ export class AddTaskModal extends Modal {
 		input.focus();
 	}
 
+	private computeFileSuggestions(query: string): FileSuggestion[] {
+		const q = query.trim().toLowerCase();
+		const out: FileSuggestion[] = [];
+		for (const f of this.plugin.taskFiles()) {
+			if (q === '' || f.path.toLowerCase().includes(q)) {
+				out.push({ path: f.path, create: false });
+			}
+		}
+		out.sort((a, b) => (a.path < b.path ? -1 : 1));
+		const typed = query.trim();
+		if (
+			typed !== '' &&
+			typed.endsWith('.md') &&
+			!this.plugin.taskFiles().some((f) => f.path === typed) &&
+			this.plugin.isRelevantPath(typed)
+		) {
+			out.push({ path: typed, create: true });
+		}
+		return out.slice(0, 80);
+	}
+
 	async submit(): Promise<void> {
 		const title = (this.taskInputEl?.value ?? '').trim();
 		if (!title) {
 			new Notice('Enter a task title first.', 4000);
 			return;
 		}
+		if (this.file.trim() === '') {
+			new Notice('Pick a file first.', 4000);
+			return;
+		}
 		try {
-			await this.plugin.addTask(title, this.file);
+			await this.plugin.addTask(title, this.file, this.bucket);
 			this.close();
 		} catch (err) {
 			new Notice(
@@ -768,12 +906,12 @@ export class AddTaskModal extends Modal {
 	}
 }
 
-interface MoveSuggestion {
+interface FileSuggestion {
 	path: string;
 	create: boolean;
 }
 
-export class MoveTaskModal extends SuggestModal<MoveSuggestion> {
+export class MoveTaskModal extends SuggestModal<FileSuggestion> {
 	plugin: EisenhowerPlugin;
 	task: ParsedTask;
 
@@ -785,9 +923,9 @@ export class MoveTaskModal extends SuggestModal<MoveSuggestion> {
 		this.setPlaceholder(`Currently in ${task.file} — pick another note`);
 	}
 
-	getSuggestions(query: string): MoveSuggestion[] {
+	getSuggestions(query: string): FileSuggestion[] {
 		const q = query.trim().toLowerCase();
-		const out: MoveSuggestion[] = [];
+		const out: FileSuggestion[] = [];
 		for (const f of this.plugin.taskFiles()) {
 			if (f.path === this.task.file) continue;
 			if (q !== '') {
@@ -811,14 +949,14 @@ export class MoveTaskModal extends SuggestModal<MoveSuggestion> {
 		return out;
 	}
 
-	renderSuggestion(item: MoveSuggestion, el: HTMLElement): void {
+	renderSuggestion(item: FileSuggestion, el: HTMLElement): void {
 		el.createSpan({ text: item.path });
 		if (item.create) {
 			el.createSpan({ text: ' — will be created', cls: 'eisenhower-move-create' });
 		}
 	}
 
-	onChooseSuggestion(item: MoveSuggestion, _evt: MouseEvent | KeyboardEvent): void {
+	onChooseSuggestion(item: FileSuggestion, _evt: MouseEvent | KeyboardEvent): void {
 		void this.plugin
 			.moveTaskToFile(this.task, item.path)
 			.then(() => {

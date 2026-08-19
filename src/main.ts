@@ -239,20 +239,36 @@ export default class EisenhowerPlugin extends Plugin {
 		await this.reloadNow();
 	}
 
-	async addTask(title: string, filePath: string): Promise<void> {
+	async addTask(
+		title: string,
+		filePath: string,
+		bucket: Bucket = 'inbox',
+	): Promise<void> {
 		const path = filePath.trim();
 		if (!path) throw new Error('No file selected.');
 		if (!path.endsWith('.md')) {
 			throw new Error(`${path} is not a markdown file.`);
+		}
+		if (!this.isRelevantPath(path)) {
+			throw new Error(`${path} is outside the scanned task scope.`);
 		}
 		let file = this.app.vault.getFileByPath(path);
 		if (!file) {
 			file = await this.app.vault.create(path, '');
 		}
 		const content = await this.app.vault.read(file);
+		const norm = normalizeTitle(title);
+		const occurrence = parseFileTasks(path, content).filter(
+			(t) => normalizeTitle(t.title) === norm,
+		).length;
 		const prefix = content.length === 0 || content.endsWith('\n') ? '' : '\n';
 		await this.app.vault.append(file, `${prefix}- [ ] ${title}\n`);
 		await this.reloadNow();
+		if (bucket !== 'inbox') {
+			const newId = taskId(path, occurrence, title);
+			const len = (this.state.bucketOrder[bucket] ?? []).length;
+			await this.moveTask(newId, bucket, len);
+		}
 	}
 
 	async moveTaskToFile(task: ParsedTask, targetPath: string): Promise<void> {
