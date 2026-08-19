@@ -7,9 +7,12 @@ import {
 	emptyState,
 	findTask,
 	flipLine,
+	migrateTaskId,
 	moveTask,
+	normalizeTitle,
 	parseFileTasks,
 	reconcile,
+	taskId,
 } from './model';
 import {
 	DEFAULT_SETTINGS,
@@ -248,6 +251,52 @@ export default class EisenhowerPlugin extends Plugin {
 		const content = await this.app.vault.read(file);
 		const prefix = content.length === 0 || content.endsWith('\n') ? '' : '\n';
 		await this.app.vault.append(file, `${prefix}- [ ] ${title}\n`);
+		await this.reloadNow();
+	}
+
+	async moveTaskToFile(task: ParsedTask, targetPath: string): Promise<void> {
+		const path = targetPath.trim();
+		if (!path) throw new Error('No file selected.');
+		if (!path.endsWith('.md')) {
+			throw new Error(`${path} is not a markdown file.`);
+		}
+		if (!this.isRelevantPath(path)) {
+			throw new Error(`${path} is outside the scanned task scope.`);
+		}
+		if (path === task.file) {
+			throw new Error('The task is already in that note.');
+		}
+
+		let target = this.app.vault.getFileByPath(path);
+		if (!target) {
+			target = await this.app.vault.create(path, '');
+		}
+
+		const box = task.completed ? '[x]' : '[ ]';
+		let newId = taskId(path, 0, task.title);
+		await this.app.vault.process(target, (current) => {
+			const norm = normalizeTitle(task.title);
+			const occurrence = parseFileTasks(path, current).filter(
+				(t) => normalizeTitle(t.title) === norm,
+			).length;
+			newId = taskId(path, occurrence, task.title);
+			const prefix =
+				current.length === 0 || current.endsWith('\n') ? '' : '\n';
+			return `${current}${prefix}- ${box} ${task.title}\n`;
+		});
+
+		const source = this.app.vault.getFileByPath(task.file);
+		if (source) {
+			await this.app.vault.process(source, (current) => {
+				const found = findTask(parseFileTasks(source.path, current), task.id);
+				if (!found) return current;
+				const lines = current.split('\n');
+				lines.splice(found.line, 1);
+				return lines.join('\n');
+			});
+		}
+
+		this.state = migrateTaskId(this.state, task.id, newId);
 		await this.reloadNow();
 	}
 

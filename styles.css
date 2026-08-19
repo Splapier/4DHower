@@ -315,6 +315,11 @@
 }
 
 /* Modal */
+.eisenhower-move-create {
+	color: var(--text-faint);
+	font-size: 0.85em;
+}
+
 .eisenhower-modal-actions {
 	display: flex;
 	justify-content: flex-end;

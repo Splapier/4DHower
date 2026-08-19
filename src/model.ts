@@ -224,6 +224,36 @@ export function moveTask(
   return newState;
 }
 
+export function migrateTaskId(
+  state: MatrixState,
+  oldId: string,
+  newId: string,
+): MatrixState {
+  if (oldId === newId) return state;
+  const bucketOrder = { ...state.bucketOrder };
+  let source: Bucket | null = bucketIndexCache.get(state)?.get(oldId) ?? null;
+  if (!source) {
+    for (const bucket of BUCKETS) {
+      if ((bucketOrder[bucket] ?? []).includes(oldId)) {
+        source = bucket;
+        break;
+      }
+    }
+  }
+  if (source) {
+    const arr = [...bucketOrder[source]];
+    const idx = arr.indexOf(oldId);
+    if (idx !== -1) {
+      arr.splice(idx, 1, newId);
+      bucketOrder[source] = arr;
+    }
+  }
+  const clearedIds = state.clearedIds.map((id) => (id === oldId ? newId : id));
+  const newState = { bucketOrder, clearedIds };
+  buildBucketIndex(newState);
+  return newState;
+}
+
 export function bucketOf(state: MatrixState, id: string): Bucket | null {
 	const map = bucketIndexCache.get(state);
 	if (map) return map.get(id) ?? null;

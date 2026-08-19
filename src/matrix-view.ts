@@ -6,6 +6,7 @@ import {
 	Modal,
 	Notice,
 	Setting,
+	SuggestModal,
 	WorkspaceLeaf,
 	setIcon,
 } from 'obsidian';
@@ -380,8 +381,8 @@ export class EisenhowerMatrixView extends ItemView {
 		const badge = row.createEl('button', {
 			cls: 'eisenhower-badge',
 			attr: {
-				'aria-label': `Open ${t.file}`,
-				title: t.file,
+				'aria-label': `Move task to another note (currently ${t.file})`,
+				title: `Currently in ${t.file} — click to move`,
 				type: 'button',
 			},
 		});
@@ -390,13 +391,8 @@ export class EisenhowerMatrixView extends ItemView {
 			text: fileBaseName(t.file),
 			cls: 'eisenhower-badge-text',
 		});
-		this.registerDomEvent(badge, 'click', async () => {
-			const file = this.app.vault.getFileByPath(t.file);
-			if (file) {
-				await this.app.workspace.getLeaf(true).openFile(file);
-			} else {
-				new Notice(`File not found: ${t.file}`, 5000);
-			}
+		this.registerDomEvent(badge, 'click', () => {
+			new MoveTaskModal(this.app, this.plugin, t).open();
 		});
 
 		const more = row.createEl('button', {
@@ -486,6 +482,29 @@ export class EisenhowerMatrixView extends ItemView {
 					}),
 			);
 		}
+
+		menu.addSeparator();
+		menu.addItem((item) =>
+			item
+				.setTitle('Open note')
+				.setIcon('file-text')
+				.onClick(() => {
+					const file = this.app.vault.getFileByPath(t.file);
+					if (file) {
+						void this.app.workspace.getLeaf(true).openFile(file);
+					} else {
+						new Notice(`File not found: ${t.file}`, 5000);
+					}
+				}),
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle('Move to note…')
+				.setIcon('folder-input')
+				.onClick(() => {
+					new MoveTaskModal(this.app, this.plugin, t).open();
+				}),
+		);
 
 		menu.showAtMouseEvent(evt);
 	}
@@ -578,6 +597,71 @@ export class AddTaskModal extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
+	}
+}
+
+interface MoveSuggestion {
+	path: string;
+	create: boolean;
+}
+
+export class MoveTaskModal extends SuggestModal<MoveSuggestion> {
+	plugin: EisenhowerPlugin;
+	task: ParsedTask;
+
+	constructor(app: App, plugin: EisenhowerPlugin, task: ParsedTask) {
+		super(app);
+		this.plugin = plugin;
+		this.task = task;
+		this.setTitle('Move task to note');
+		this.setPlaceholder(`Currently in ${task.file} — pick another note`);
+	}
+
+	getSuggestions(query: string): MoveSuggestion[] {
+		const q = query.trim().toLowerCase();
+		const out: MoveSuggestion[] = [];
+		for (const f of this.plugin.taskFiles()) {
+			if (f.path === this.task.file) continue;
+			if (q !== '') {
+				const name = fileBaseName(f.path).toLowerCase();
+				if (!f.path.toLowerCase().includes(q) && !name.includes(q)) {
+					continue;
+				}
+			}
+			out.push({ path: f.path, create: false });
+		}
+		out.sort((a, b) => (a.path < b.path ? -1 : 1));
+		const typed = query.trim();
+		if (
+			typed !== '' &&
+			typed.endsWith('.md') &&
+			!this.plugin.taskFiles().some((f) => f.path === typed) &&
+			this.plugin.isRelevantPath(typed)
+		) {
+			out.push({ path: typed, create: true });
+		}
+		return out;
+	}
+
+	renderSuggestion(item: MoveSuggestion, el: HTMLElement): void {
+		el.createSpan({ text: item.path });
+		if (item.create) {
+			el.createSpan({ text: ' — will be created', cls: 'eisenhower-move-create' });
+		}
+	}
+
+	onChooseSuggestion(item: MoveSuggestion, _evt: MouseEvent | KeyboardEvent): void {
+		void this.plugin
+			.moveTaskToFile(this.task, item.path)
+			.then(() => {
+				new Notice(`Moved to ${item.path}`, 2500);
+			})
+			.catch((err: unknown) => {
+				new Notice(
+					err instanceof Error ? err.message : 'Failed to move task.',
+					6000,
+				);
+			});
 	}
 }
 
