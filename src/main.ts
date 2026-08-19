@@ -300,6 +300,22 @@ export default class EisenhowerPlugin extends Plugin {
 		await this.reloadNow();
 	}
 
+	async deleteTask(task: ParsedTask): Promise<void> {
+		const file = this.app.vault.getFileByPath(task.file);
+		if (!file) {
+			new Notice(`File not found: ${task.file}`, 5000);
+			return;
+		}
+		await this.app.vault.process(file, (current) => {
+			const found = findTask(parseFileTasks(file.path, current), task.id);
+			if (!found) return current;
+			const lines = current.split('\n');
+			lines.splice(found.line, 1);
+			return lines.join('\n');
+		});
+		await this.reloadNow();
+	}
+
 	async completeTheDay(): Promise<void> {
 		this.state = buildCompletedDayState(this.tasks, this.state);
 		this.notify();

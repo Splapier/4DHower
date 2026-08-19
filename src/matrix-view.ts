@@ -506,6 +506,20 @@ export class EisenhowerMatrixView extends ItemView {
 				}),
 		);
 
+		menu.addSeparator();
+		menu.addItem((item) =>
+			item
+				.setTitle('Delete')
+				.setIcon('trash-2')
+				.onClick(() => {
+					new ConfirmationModal(
+						this.app,
+						`Delete the task from ${t.file}? This removes it from the note and the matrix.`,
+						() => this.plugin.deleteTask(t),
+					).open();
+				}),
+		);
+
 		menu.showAtMouseEvent(evt);
 	}
 
