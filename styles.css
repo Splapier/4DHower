@@ -185,6 +185,52 @@
 	min-height: 0;
 }
 
+/* Quadrant accent colors */
+.eisenhower-quadrant[data-bucket='q1'] {
+	--q-accent: #69131E;
+}
+
+.eisenhower-quadrant[data-bucket='q2'] {
+	--q-accent: #d97a26;
+}
+
+.eisenhower-quadrant[data-bucket='q3'] {
+	--q-accent: #c9971c;
+}
+
+.eisenhower-quadrant[data-bucket='q4'] {
+	--q-accent: #9b59b6;
+}
+
+.eisenhower-quadrant[data-bucket='q1'],
+.eisenhower-quadrant[data-bucket='q2'],
+.eisenhower-quadrant[data-bucket='q3'],
+.eisenhower-quadrant[data-bucket='q4'] {
+	border-color: color-mix(in srgb, var(--q-accent) 45%, var(--background-modifier-border));
+}
+
+.eisenhower-quadrant[data-bucket='q1'] .eisenhower-qhead,
+.eisenhower-quadrant[data-bucket='q2'] .eisenhower-qhead,
+.eisenhower-quadrant[data-bucket='q3'] .eisenhower-qhead,
+.eisenhower-quadrant[data-bucket='q4'] .eisenhower-qhead {
+	background: color-mix(in srgb, var(--q-accent) 75%, var(--background-primary));
+	border-bottom-color: color-mix(in srgb, var(--q-accent) 40%, var(--background-modifier-border));
+}
+
+.eisenhower-quadrant[data-bucket='q1'] .eisenhower-qicon,
+.eisenhower-quadrant[data-bucket='q2'] .eisenhower-qicon,
+.eisenhower-quadrant[data-bucket='q3'] .eisenhower-qicon,
+.eisenhower-quadrant[data-bucket='q4'] .eisenhower-qicon {
+	color: var(--q-accent);
+}
+
+.eisenhower-quadrant[data-bucket='q1'] .eisenhower-row:hover,
+.eisenhower-quadrant[data-bucket='q2'] .eisenhower-row:hover,
+.eisenhower-quadrant[data-bucket='q3'] .eisenhower-row:hover,
+.eisenhower-quadrant[data-bucket='q4'] .eisenhower-row:hover {
+	border-color: var(--q-accent);
+}
+
 .eisenhower-qhead {
 	display: flex;
 	align-items: center;
