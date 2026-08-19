@@ -106,6 +106,49 @@
 	white-space: nowrap;
 }
 
+.eisenhower-filtercontrol {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.eisenhower-filtersearch,
+.eisenhower-inboxsearch {
+	background: var(--background-modifier-hover, var(--background-secondary));
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	color: var(--normal-text);
+	font-size: 0.8em;
+	padding: 2px 8px;
+}
+
+.eisenhower-filtersearch {
+	width: 140px;
+}
+
+.eisenhower-filtersearch:focus,
+.eisenhower-inboxsearch:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+}
+
+.eisenhower-filternomatch {
+	color: var(--text-faint);
+	font-size: 0.8em;
+	font-style: italic;
+}
+
+.eisenhower-inboxsearchbar {
+	padding: 4px 6px 0;
+	flex-shrink: 0;
+}
+
+.eisenhower-inboxsearch {
+	width: 100%;
+	box-sizing: border-box;
+}
+
 .eisenhower-grid {
 	display: grid;
 	grid-template-columns: 1fr 1fr;

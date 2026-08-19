@@ -44,6 +44,8 @@ export class EisenhowerMatrixView extends ItemView {
 
 	plugin: EisenhowerPlugin;
 	filter: string[] = [];
+	inboxQuery: string = '';
+	filterQuery: string = '';
 	containers: Partial<Record<Bucket, HTMLElement>> = {};
 	filterRow: HTMLElement | null = null;
 	private drag: { id: string; row: HTMLElement } | null = null;
@@ -78,6 +80,8 @@ export class EisenhowerMatrixView extends ItemView {
 		this.lastFilterKey = null;
 		this.drag = null;
 		this.dragStartTick = 0;
+		this.inboxQuery = '';
+		this.filterQuery = '';
 		el.addClass('eisenhower-view');
 
 		const header = el.createDiv({ cls: 'eisenhower-header' });
@@ -155,6 +159,18 @@ export class EisenhowerMatrixView extends ItemView {
 			setIcon(plus, 'plus');
 			this.registerDomEvent(plus, 'click', () => {
 				new AddTaskModal(this.app, this.plugin).open();
+			});
+			const searchbar = box.createDiv({ cls: 'eisenhower-inboxsearchbar' });
+			const search = searchbar.createEl('input', {
+				cls: 'eisenhower-inboxsearch',
+				type: 'text',
+				placeholder: 'Search inbox',
+				attr: { 'aria-label': 'Search inbox' },
+			});
+			search.value = this.inboxQuery;
+			this.registerDomEvent(search, 'input', () => {
+				this.inboxQuery = search.value;
+				this.render();
 			});
 		}
 		const body = box.createDiv({ cls: 'eisenhower-body' });
@@ -259,15 +275,47 @@ export class EisenhowerMatrixView extends ItemView {
 		const files = Array.from(new Set(this.plugin.tasks.map((t) => t.file))).sort();
 		this.filter = this.filter.filter((f) => files.indexOf(f) !== -1);
 		const key =
-			files.join('\u0001') + '\u0001' + [...this.filter].sort().join('\u0001');
+			files.join('\u0001') +
+			'\u0001' +
+			[...this.filter].sort().join('\u0001') +
+			'\u0001' +
+			this.filterQuery;
 		if (key === this.lastFilterKey) return;
 		this.lastFilterKey = key;
+		const prevSearch = filterRow.querySelector<HTMLInputElement>(
+			'.eisenhower-filtersearch',
+		);
+		const searchFocused =
+			prevSearch !== null && document.activeElement === prevSearch;
+		const searchCaret =
+			searchFocused && prevSearch !== null ? prevSearch.selectionStart ?? 0 : 0;
 		filterRow.empty();
 		const setting = new Setting(filterRow)
 			.setName('Filter')
 			.setDesc('Show tasks from the selected files. None selected shows all.');
-		const chips = setting.controlEl.createDiv({ cls: 'eisenhower-filterchips' });
+		const control = setting.controlEl;
+		control.addClass('eisenhower-filtercontrol');
+		const search = control.createEl('input', {
+			cls: 'eisenhower-filtersearch',
+			type: 'text',
+			placeholder: 'Search filters',
+			attr: { 'aria-label': 'Search filters' },
+		});
+		search.value = this.filterQuery;
+		this.registerDomEvent(search, 'input', () => {
+			this.filterQuery = search.value;
+			this.render();
+		});
+		const chips = control.createDiv({ cls: 'eisenhower-filterchips' });
+		const q = this.filterQuery.trim().toLowerCase();
 		for (const f of files) {
+			if (
+				q !== '' &&
+				!f.toLowerCase().includes(q) &&
+				!fileBaseName(f).toLowerCase().includes(q)
+			) {
+				continue;
+			}
 			const active = this.filter.indexOf(f) !== -1;
 			const chip = chips.createEl('button', {
 				cls: 'eisenhower-chip',
@@ -286,6 +334,21 @@ export class EisenhowerMatrixView extends ItemView {
 				this.render();
 			});
 		}
+		if (chips.childElementCount === 0) {
+			chips.createSpan({
+				text: 'No matching filters',
+				cls: 'eisenhower-filternomatch',
+			});
+		}
+		if (searchFocused) {
+			const newSearch = filterRow.querySelector<HTMLInputElement>(
+				'.eisenhower-filtersearch',
+			);
+			if (newSearch) {
+				newSearch.focus();
+				newSearch.setSelectionRange(searchCaret, searchCaret);
+			}
+		}
 	}
 
 	render(state?: MatrixState): void {
@@ -298,11 +361,14 @@ export class EisenhowerMatrixView extends ItemView {
 		const desired = {} as Record<Bucket, ParsedTask[]>;
 		for (const bucket of BUCKETS) {
 			const list: ParsedTask[] = [];
+			const inboxQ =
+				bucket === 'inbox' ? this.inboxQuery.trim().toLowerCase() : '';
 			for (const id of st.bucketOrder[bucket] ?? []) {
 				if (clearedSet.has(id)) continue;
 				const t = byId.get(id);
 				if (!t) continue;
 				if (filterSet !== null && !filterSet.has(t.file)) continue;
+				if (inboxQ !== '' && !t.title.toLowerCase().includes(inboxQ)) continue;
 				list.push(t);
 				wanted.add(t.id);
 			}
