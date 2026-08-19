@@ -525,12 +525,11 @@ export class EisenhowerMatrixView extends ItemView {
 
 	// --- Complete the day -------------------------------------------------------
 	private confirmCompleteDay(): void {
-		const unfinished = this.plugin.tasks.filter((t) => !t.completed).length;
-		const message =
-			unfinished === 0
-				? 'All tasks are already complete. Archive everything?'
-				: `${unfinished} unfinished task${unfinished === 1 ? '' : 's'} will move to the inbox and completed tasks will be archived. Continue?`;
-		new ConfirmationModal(this.app, message, () => this.plugin.completeTheDay()).open();
+		new ConfirmationModal(
+			this.app,
+			this.plugin.completeDayPrompt(),
+			() => this.plugin.completeTheDay(),
+		).open();
 	}
 }
 

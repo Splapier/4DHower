@@ -3,6 +3,7 @@ import {
 	Bucket,
 	MatrixState,
 	ParsedTask,
+	bucketOf,
 	buildCompletedDayState,
 	emptyState,
 	findTask,
@@ -75,12 +76,11 @@ export default class EisenhowerPlugin extends Plugin {
 			id: 'eisenhower-complete-day',
 			name: 'Complete the day',
 			callback: () => {
-				const unfinished = this.tasks.filter((t) => !t.completed).length;
-				const message =
-					unfinished === 0
-						? 'All tasks are already complete. Archive everything?'
-						: `${unfinished} unfinished task${unfinished === 1 ? '' : 's'} will move to the inbox and completed tasks will be archived. Continue?`;
-				new ConfirmationModal(this.app, message, () => this.completeTheDay()).open();
+				new ConfirmationModal(
+					this.app,
+					this.completeDayPrompt(),
+					() => this.completeTheDay(),
+				).open();
 			},
 		});
 
@@ -314,6 +314,17 @@ export default class EisenhowerPlugin extends Plugin {
 			return lines.join('\n');
 		});
 		await this.reloadNow();
+	}
+
+	completeDayPrompt(): string {
+		const unfinished = this.tasks.filter(
+			(t) => !t.completed && bucketOf(this.state, t.id) !== 'inbox',
+		).length;
+		return (
+			unfinished === 0
+				? 'No unfinished tasks in the quadrants. Completed tasks will be archived. Continue?'
+				: `${unfinished} unfinished task${unfinished === 1 ? '' : 's'} will move to the inbox and completed tasks will be archived. Continue?`
+		);
 	}
 
 	async completeTheDay(): Promise<void> {
