@@ -69,6 +69,9 @@
 	flex-wrap: wrap;
 	justify-content: flex-end;
 	gap: 6px;
+	max-height: calc(2.4em + 20px);
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 
 .eisenhower-chip {
