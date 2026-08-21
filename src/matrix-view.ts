@@ -699,7 +699,12 @@ export class AddTaskModal extends Modal {
 	constructor(app: App, plugin: EisenhowerPlugin) {
 		super(app);
 		this.plugin = plugin;
-		this.file = plugin.settings.defaultTaskFile;
+		const remembered = plugin.lastAddFile;
+		this.file =
+			remembered !== null && plugin.isRelevantPath(remembered)
+				? remembered
+				: plugin.settings.defaultTaskFile;
+		this.bucket = plugin.lastAddBucket ?? 'inbox';
 	}
 
 	onOpen(): void {
@@ -892,6 +897,8 @@ export class AddTaskModal extends Modal {
 		}
 		try {
 			await this.plugin.addTask(title, this.file, this.bucket);
+			this.plugin.lastAddFile = this.file.trim();
+			this.plugin.lastAddBucket = this.bucket;
 			this.close();
 		} catch (err) {
 			new Notice(

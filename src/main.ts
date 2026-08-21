@@ -40,6 +40,8 @@ export default class EisenhowerPlugin extends Plugin {
 	settings: EisenhowerSettings = { ...DEFAULT_SETTINGS };
 	state: MatrixState = emptyState();
 	tasks: ParsedTask[] = [];
+	lastAddFile: string | null = null;
+	lastAddBucket: Bucket | null = null;
 
 	private listeners = new Set<StateListener>();
 	private reloadTimer: number | null = null;
